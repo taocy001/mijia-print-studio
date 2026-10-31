@@ -25,7 +25,7 @@ with sync_playwright() as p:
    page.evaluate("closeSheet();state.photos=[];state.mode='photo';state.media=5012;render()")
    page.wait_for_timeout(100)
    before=page.locator('#photos').bounding_box();dock=page.locator('.dock').bounding_box()
-   assert abs(before['y']+before['height']-dock['y'])<3,(width,scheme,before,dock)
+   if width<1000:assert abs(before['y']+before['height']-dock['y'])<3,(width,scheme,before,dock)
    page.locator('#sampleBtn').click();page.wait_for_function('state.photos.length===1');page.wait_for_timeout(100)
    after=page.locator('#photos').bounding_box();assert abs(after['y']-before['y'])<2,(width,before,after)
    for id in ['layoutBtn','filterBtn','templateBtn','addTextQuick','addEmojiQuick']:

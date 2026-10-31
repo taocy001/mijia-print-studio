@@ -5,3 +5,38 @@
  .browser-client #paperStage{flex:none}
  .browser-client .photo-strip{justify-content:center}
 }
+
+@media(min-width:1000px) and (pointer:fine){
+ .browser-client body.desktop-editor{--inspector-width:360px;--desktop-gap:24px;overflow:hidden!important}
+ .browser-client body.desktop-editor .app,.browser-client body.desktop-editor.has-work .app{max-width:none;width:100%;height:100dvh;min-height:0;margin:0;padding:72px calc(var(--inspector-width) + 48px) 16px 24px;display:grid;grid-template-rows:minmax(0,1fr) auto;gap:12px}
+ .browser-client body.desktop-editor .topbar{position:fixed;inset:0 0 auto;height:56px;grid-template-columns:1fr auto 1fr;padding:0 24px}
+ .browser-client body.desktop-editor .topbar #printBtn{font-size:14px;min-height:38px;padding-inline:20px}
+ .browser-client body.desktop-editor .workspace,.browser-client body.desktop-editor.has-work .workspace{grid-row:1;min-height:0;overflow:hidden;width:100%;margin:0}
+ .browser-client body.desktop-editor .board,.browser-client body.desktop-editor.has-work .board{height:100%;width:100%;margin:0;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:16px;background:#202226}
+ .browser-client body.desktop-editor .empty{width:100%;height:100%;background:transparent}
+ .browser-client body.desktop-editor .editor-controls{grid-row:2;margin:0;background:transparent}
+ .browser-client body.desktop-editor .photo-strip{display:flex;justify-content:center;gap:10px;min-height:80px;padding:8px 10px;margin:0}
+ .browser-client body.desktop-editor .photo-thumb,.browser-client body.desktop-editor .add-photo{flex:0 0 64px;width:64px;height:64px}
+ .browser-client body.desktop-editor .dock{display:block!important;position:fixed;top:72px;right:24px;left:auto;bottom:auto;transform:none;width:var(--inspector-width);max-width:none;padding:0;border:1px solid var(--line);border-radius:14px 14px 0 0;z-index:22}
+ .browser-client body.desktop-editor .tool-tabs{width:100%;height:68px;max-width:none}
+ .browser-client body.desktop-editor .tool-tabs button{font-size:12px;min-width:0}
+ .browser-client body.desktop-editor .tool-tabs [aria-pressed=true]{color:var(--gold);background:var(--sage);border-radius:12px}
+ .browser-client body.desktop-editor #sheet.desktop-inspector{position:fixed;top:calc(72px + var(--browser-dock-height,68px));right:24px;left:auto;bottom:16px;transform:none;width:var(--inspector-width);height:auto!important;max-height:none;border:1px solid var(--line);border-top:0;border-radius:0 0 14px 14px;padding:16px 14px;box-shadow:none;z-index:21}
+ .browser-client body.desktop-editor #sheet.desktop-inspector>.sheet-handle,.browser-client body.desktop-editor #sheet.desktop-inspector>header{display:none}
+ .browser-client body.desktop-editor #sheet.desktop-inspector #sheetBody{padding:0 2px 12px;scrollbar-gutter:stable}
+ .browser-client body.desktop-editor .template-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+ .browser-client body.desktop-editor .template-card{padding:6px;border-radius:10px;font-size:11px}
+ .browser-client body.desktop-editor .template-card img{width:100%;height:110px;object-fit:contain}
+ .browser-client body.desktop-editor #sheet:not(.desktop-inspector){left:50%;right:auto;transform:translateX(-50%);width:min(820px,calc(100vw - 80px));bottom:24px;z-index:35;max-height:calc(100dvh - 48px);border-radius:18px}
+ .browser-client body.desktop-editor #sheet:not(.desktop-inspector) .print-pages{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+ .browser-client body.desktop-editor .toast,.browser-client body.desktop-editor .layer-undo{left:calc((100vw - var(--inspector-width) - 24px)/2);bottom:110px}
+}
+@media(min-width:1500px) and (pointer:fine){.browser-client body.desktop-editor{--inspector-width:400px}.browser-client body.desktop-editor .template-card img{height:130px}}
+@media(min-width:1000px) and (pointer:fine) and (prefers-color-scheme:light){.browser-client body.desktop-editor .board{background:#e4e6e9}.browser-client body.desktop-editor .dock{background:#fff}.browser-client body.desktop-editor #sheet.desktop-inspector{background:#fff}}
+
+@media(min-width:1000px) and (pointer:fine){.browser-client body.desktop-editor #scrim{z-index:30}}
+
+@media(min-width:1000px) and (pointer:fine){
+ .browser-client body.desktop-editor #sheet:not(.desktop-inspector) .print-pages:has(>figure:only-child){grid-template-columns:minmax(0,1fr)}
+ .browser-client body.desktop-editor #sheet:not(.desktop-inspector) .confirmation-preview img{max-height:min(58dvh,620px)}
+}
