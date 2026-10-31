@@ -32,7 +32,7 @@ App 的「更多 → 共享打印」可开启本机访问或同一 Wi-Fi 共享�
 需在解锁后的 App 前台开启，后台运行保留通知；系统强制停止或省电限制可能中断服务。
 
 `assets/` 是两端唯一编辑器源文件；Android 原生能力在 `src/`。接口与迁移边界见 `web/CONTRACT.md`。
-电脑服务入口为 `web/serve.py`，独立蓝牙后端与 Android 共用网页代码、素材和打印数据格式。原有 Web、AirPrint/AirDrop 服务未改动。
+电脑服务入口为 `web/serve.py`，独立蓝牙后端与 Android 共用网页代码、素材和打印数据格式。旧 Web、AirPrint/AirDrop 源码与数据保留，可作为回退。
 
 ## 电脑服务
 
@@ -52,7 +52,7 @@ build/venv/bin/python web/serve.py --simulate
 抠图使用同一份 U2NetP 模型；模型未准备时执行 `python3 fetch_deps.py`，其余编辑功能不依赖模型。
 
 打印结果未知时保留任务记录并暂停队列，不能直接重试；电脑端的异常记录仍需在服务端核对处理。
-现有电脑 Web 服务继续保留。新入口不复制旧布局代码，采用共用编辑器，尚未替换原服务。
+旧电脑 Web 源码与数据继续保留。新入口采用共用编辑器，可接管原 Web 和 AirPrint 端口；旧任务不会迁移或重放。
 
 ## 测试
 
