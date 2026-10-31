@@ -92,3 +92,5 @@ body:not(.landscape) .workspace,body:not(.landscape).has-work .workspace{flex:1;
 body:not(.landscape) .board{flex-shrink:0;margin-block:auto}
 body:not(.landscape):not(.has-work) .board{width:100%;flex:1;display:flex}
 body:not(.landscape) .empty{flex:1;min-height:0;padding:24px 18px;background:var(--bg)}
+
+.has-work .board #preview.photo-draggable{touch-action:none}

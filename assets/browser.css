@@ -45,11 +45,7 @@
 .share-address label{grid-column:1/-1;font-size:12px;color:var(--muted)}
 .share-address input{min-width:0;width:100%;font-size:14px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink)}
 .share-address button{border-radius:10px;padding:0 16px;background:var(--sage)}
-.browser-actions{display:flex;align-items:center;width:76px}
-.browser-actions #fullscreenBtn{width:32px;min-width:32px;padding:0;display:grid;place-items:center;min-height:44px;color:var(--ink)}
-.browser-actions #fullscreenBtn svg{width:19px;height:19px}
 @media(min-width:1000px) and (pointer:fine){
- .browser-actions #fullscreenBtn{display:none}
  .browser-client body.desktop-editor #sheet.desktop-settings{top:32px;bottom:auto;left:50%;right:auto;transform:translateX(-50%);width:min(800px,calc(100vw - 64px));max-width:none;height:min(760px,calc(100dvh - 64px))!important;max-height:calc(100dvh - 64px);padding:0 28px 24px;border-radius:18px}
  .browser-client body.desktop-editor #sheet.desktop-settings>.sheet-handle{display:none}
  .browser-client body.desktop-editor #sheet.desktop-settings>header{flex-basis:76px;display:flex;gap:12px;cursor:default;touch-action:auto;margin:0;border-bottom:1px solid var(--line);background:transparent}
@@ -62,5 +58,3 @@
  .browser-client body.desktop-editor #sheet.desktop-settings .info-row{padding:18px 0}
  .browser-client body.desktop-editor #sheet.desktop-settings .share-address input{font-size:16px}
 }
-
-.browser-client body.landscape .browser-actions{width:48px;flex-direction:column;align-items:center}

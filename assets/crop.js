@@ -25,9 +25,9 @@ window.CropEditor=(()=>{
  }
 
  function render(){
-  if(!ready()||!printPreview){view=null;placeEdges(false);return;}
+  if(!ready()||!printPreview){view=null;canvas.classList.remove('photo-draggable');placeEdges(false);return;}
   const next=[state.mode,state.media,state.orientation,state.active,active()?.src].join('|');if(next!==scope){scope=next;resetGesture();}
-  frame=photoFrames.find(f=>f.p===active())||photoFrames[0]||null;canvas.classList.toggle('photo-zoomed',!!frame&&(frame.p.zoom||1)>1.001);
+  frame=photoFrames.find(f=>f.p===active())||photoFrames[0]||null;const dragGeometry=frame&&photoGeometry(frame.p,frame.w,frame.h,frame.fit);canvas.classList.toggle('photo-draggable',!!dragGeometry&&!peek&&(dragGeometry.ex>.5||dragGeometry.ey>.5));canvas.classList.toggle('photo-zoomed',!!frame&&(frame.p.zoom||1)>1.001);
   const [w,h]=logicalSize(),stage=$('paperStage');
   let width,pad,tx,ty,cw,ch;
   const complete=state.mode==='photo'&&[5009,5012].includes(state.media)&&frame;
@@ -52,14 +52,14 @@ window.CropEditor=(()=>{
   const px=canvas.width/width;ctx.lineWidth=3*px;ctx.strokeStyle='#203d3377';ctx.strokeRect(0,0,w,h);ctx.lineWidth=px;ctx.setLineDash([5*px,4*px]);ctx.strokeStyle='#ffffff';ctx.strokeRect(0,0,w,h);ctx.setLineDash([]);
   if(frame&&(frame.x||frame.y||frame.w!==w||frame.h!==h)){ctx.lineWidth=px;ctx.strokeStyle='#d99832';ctx.strokeRect(frame.x,frame.y,frame.w,frame.h);}
   if(state.media===5014){ctx.beginPath();ctx.setLineDash([7*px,5*px]);ctx.strokeStyle='#d99832';ctx.moveTo(0,h/2);ctx.lineTo(w,h/2);ctx.stroke();}
-  ctx.restore();const movable=complete&&!peek&&photoGeometry(frame.p,frame.w,frame.h,frame.fit);placeEdges(!!movable&&(movable.ex>0||movable.ey>0));$('spliceGuide').hidden=true;$('gestureHint').textContent=frame?((frame.p.zoom||1)>1.001?'拖动照片 · 双指缩放':'上下滑动浏览 · 双指缩放'):'上下滑动浏览';
+  ctx.restore();const movable=complete&&!peek&&photoGeometry(frame.p,frame.w,frame.h,frame.fit);placeEdges(!!movable&&(movable.ex>.5||movable.ey>.5));$('spliceGuide').hidden=true;$('gestureHint').textContent=frame?(canvas.classList.contains('photo-draggable')?'拖动调整打印区域 · 双指缩放':'上下滑动浏览 · 双指缩放'):'上下滑动浏览';
  }
  function toPaper(e){const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width-(view?.tx||0),y:(e.clientY-r.top)*canvas.height/r.height-(view?.ty||0)};}
  function geometry(touches){const p=Array.from(touches,t=>toPaper(t));return !p.length?null:p.length===1?{...p[0],d:0,n:1}:{x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2,d:Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y),n:2};}
  function choose(p){return photoFrames.find(f=>p.x>=f.x&&p.x<=f.x+f.w&&p.y>=f.y&&p.y<=f.y+f.h)||frame;}
  let target=null;
  function move(now,old,multi){if(!target||peek)return;const {p,w,h,fit}=target,g=photoGeometry(p,w,h,fit),direction=state.mode==='photo'&&[5009,5012].includes(state.media)?-1:1;if(g.ex)p.x=Math.max(-1,Math.min(1,(p.x||0)+direction*(now.x-old.x)/g.ex));if(multi&&g.ey)p.y=Math.max(-1,Math.min(1,(p.y||0)+direction*(now.y-old.y)/g.ey));if(multi&&old.d&&now.d)p.zoom=Math.max(1,Math.min(4,(p.zoom||1)*now.d/old.d));schedule();}
- canvas.addEventListener('touchstart',e=>{if(!view||peek)return;previous=geometry(e.touches);if(e.touches.length===1){start=previous;target=choose(start);axis=target&&((target.p.zoom||1)>1.001||(document.body.classList.contains('landscape')||(!!window.BrowserTransport&&innerWidth>=1000&&matchMedia('(pointer:fine)').matches)))?'photo':null;if(axis==='photo')e.preventDefault();}else{e.preventDefault();axis='multi';target=target||frame;}},{passive:false});
+ canvas.addEventListener('touchstart',e=>{if(!view||peek)return;previous=geometry(e.touches);if(e.touches.length===1){start=previous;target=choose(start);axis=target&&canvas.classList.contains('photo-draggable')?'photo':null;if(axis==='photo')e.preventDefault();}else{e.preventDefault();axis='multi';target=target||frame;}},{passive:false});
  canvas.addEventListener('touchmove',e=>{if(!previous||!view)return;const now=geometry(e.touches);if(now.n>1){e.preventDefault();move(now,previous,true);previous=now;axis='multi';return;}
   // Native vertical scrolling wins. Horizontal drags are edited directly, without a mode switch.
   if(!axis&&start){const dx=now.x-start.x,dy=now.y-start.y,threshold=8*canvas.width/canvas.clientWidth;if(Math.hypot(dx,dy)>threshold)axis=Math.abs(dx)>Math.abs(dy)*1.2?'horizontal':'scroll';}

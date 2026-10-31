@@ -47,12 +47,17 @@ with sync_playwright() as p:
  rect=page.locator('[data-crop-edge=top]').bounding_box()
  drag(rect['x']+rect['width']*.4,rect['y']+16,25,25)
  assert page.evaluate('active().x')<0 and page.evaluate('active().y')<0,'Zoomed frame needs both axes'
- # Keep vertical scrolling available away from the frame at 1x.
+ # Drag the photo interior at 1x as well as the frame edge.
  page.evaluate("active().zoom=1;active().y=0;render();document.querySelector('.workspace').scrollTop=0")
  rect=page.locator('#preview').bounding_box();old=page.evaluate('active().y')
  drag(rect['x']+rect['width']/2,rect['y']+rect['height']*.45,0,-80)
- assert page.evaluate("document.querySelector('.workspace').scrollTop")>0,'Photo interior should scroll'
- assert page.evaluate('active().y')==old
+ assert page.evaluate("document.querySelector('.workspace').scrollTop")==0,'Photo drag must not scroll'
+ assert page.evaluate('active().y')>old,'Photo interior must move the crop at 1x'
+ page.evaluate("state.mode='template';active().templateId=state.templateId='studio-confetti';active().x=active().y=0;render()")
+ rect=page.locator('#preview').bounding_box();drag(rect['x']+rect['width']*.5,rect['y']+rect['height']*.4,0,-35)
+ assert page.evaluate('active().y')<0,'Template photo must drag at 1x'
+ page.evaluate("state.mode='photo';active().templateId=null;active().fit='contain';active().zoom=1;render();document.querySelector('.workspace').scrollTop=0")
+ assert page.locator('#preview').evaluate("e=>getComputedStyle(e).touchAction")=='pan-y'
  assert not errors,errors
- print('PASS: real touch frame dragging at 1x and 2x, frame follows finger, crop offset changes, photo interior still scrolls')
+ print('PASS: real touch frame dragging at 1x and 2x, frame follows finger, crop offset changes, photo interior and template drag at 1x; uncropped photo keeps native scroll')
  b.close()
