@@ -1,5 +1,5 @@
 """Serve the shared editor with an independent desktop backend."""
-import argparse,asyncio,json,os,re,secrets,time,uuid
+import argparse,asyncio,ipaddress,json,os,re,secrets,socket,time,uuid
 from pathlib import Path
 from aiohttp import web
 import sys
@@ -11,9 +11,10 @@ ROOT=Path(__file__).resolve().parents[1]
 HEADERS={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'"}
 
 class Studio:
-    def __init__(self,data=None,simulate=False,address=None,*,core=None):
+    def __init__(self,data=None,simulate=False,address=None,*,core=None,lan=False,airprint=False):
         self.core=core or PrintService(data,simulate,address)
         self.owns_core=core is None
+        self.lan=lan;self.airprint=airprint;self.address_cache=[];self.address_checked=0
         self.data=self.core.data;self.simulate=self.core.simulate
         self.code=f'{secrets.randbelow(1000000):06}';self.sessions={};self.failures=0;self.blocked_until=0
     async def start(self,app):
@@ -43,6 +44,17 @@ class Studio:
                 own=[j for j in self.core.jobs if j['owner']==session['id']];waiting=[j for j in own if j['phase'] in ('queued','printing','uncertain')];job=waiting[0] if waiting else own[-1] if own else {};public=self.core.public(job)
                 if job.get('phase')=='queued' and self.core.paused:public['message']='共享队列已暂停，请在服务端检查'
                 return web.json_response(dict(permission=True,host='desktop',airprintSplice=self.core.airprint_splice,simulation=self.simulate,busy=job.get('phase')=='printing',unresolved=bool(waiting),job=public,history=[self.core.public(j) for j in reversed(own) if j['phase']=='done'][:20],device=self.core.device,message=public.get('message','电脑共享服务已连接')))
+            if r.path=='/api/sharing':
+                if self.lan and time.monotonic()-self.address_checked>30:
+                    def addresses():
+                        values={entry[4][0] for entry in socket.getaddrinfo(socket.gethostname(),None,socket.AF_INET)}
+                        return sorted(value for value in values if ipaddress.ip_address(value).is_private and not ipaddress.ip_address(value).is_loopback)
+                    try:self.address_cache=await asyncio.wait_for(asyncio.to_thread(addresses),2)
+                    except (OSError,asyncio.TimeoutError):pass
+                    self.address_checked=time.monotonic()
+                addresses=list(self.address_cache) if self.lan else []
+                if self.lan and not ipaddress.ip_address(address).is_loopback and address not in addresses:addresses.append(address)
+                return web.json_response(dict(running=True,host='desktop',lan=self.lan,airprint=self.airprint,addresses=[f'http://{value}:{port}' for value in addresses],current='http://'+r.host))
             if r.path=='/session.js':return web.Response(text='window.STUDIO_DRAFT_KEY='+json.dumps('liuying-draft-'+session['id'])+';',content_type='application/javascript')
             if r.path.startswith('/private/'):
                 if r.path not in session['files']:raise web.HTTPNotFound()
@@ -93,7 +105,7 @@ def main():
     parser=argparse.ArgumentParser();parser.add_argument('--lan',action='store_true');parser.add_argument('--port',type=int,default=8635);parser.add_argument('--simulate',action='store_true');parser.add_argument('--data',type=Path,default=Path.home()/'Library/Application Support/LiuyingStudio');args=parser.parse_args()
     address=os.environ.get('MIJIA_BLUETOOTH_ADDRESS')
     if not args.simulate and not address:parser.error('请设置 MIJIA_BLUETOOTH_ADDRESS；仅测试网页可使用 --simulate')
-    studio=Studio(args.data,args.simulate,address);print('配对码：'+studio.code,flush=True)
+    studio=Studio(args.data,args.simulate,address,lan=args.lan);print('配对码：'+studio.code,flush=True)
     if args.simulate:print('模拟模式：不会连接打印机或实际打印。',flush=True)
     web.run_app(app(studio),host='0.0.0.0' if args.lan else '127.0.0.1',port=args.port,access_log=None)
 if __name__=='__main__':main()
