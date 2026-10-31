@@ -1,0 +1,18 @@
+(async()=>{
+ const snapshot=JSON.stringify(state),checks=[];const check=(v,m)=>{if(!v)throw Error(m);checks.push(m);};
+ try{
+  closeSheet();await loadPhoto({src:'/sample.svg'});state={...defaults,photos:Array.from({length:6},()=>({src:'/sample.svg',width:1200,height:800,turn:0,zoom:1,x:0,y:0,filter:'none',templateId:null,overlays:[]})),active:0,orientation:'portrait'};render();
+  const strip=$('photos').getBoundingClientRect(),tiles=[...document.querySelectorAll('.photo-thumb')].map(e=>e.getBoundingClientRect());
+  check(tiles.length===6&&tiles.every(t=>Math.abs(t.width-tiles[0].width)<1),'Six equal-width photo cells');check(tiles[0].left-strip.left<=7&&strip.right-tiles[5].right<=7,'Six cells fill screen row');check(!$('addMore'),'No add tile at six');
+  active().caption='FIRST CAPTION';changeSetting('filter','bw');const first=compose().toDataURL();selectPhoto(1);render();check(filter()[0]==='none'&&active().filter==='none','Changing photo restores its own tone');check(compose().toDataURL()!==first,'Different tones reach actual output');selectPhoto(0);render();check(filter()[0]==='bw','First photo retains its tone');
+  LayerEditor.create({kind:'emoji',text:'❤️',sizePct:8});LayerEditor.create({kind:'text',text:'ONLY FIRST',sizePct:9});render();check(LayerEditor.list().length===2,'Text and emoji stored on first photo');selectPhoto(1);render();check(LayerEditor.list().length===0,'Second photo has no first-photo decorations');check(!active().caption,'Second photo has no first-photo caption');LayerEditor.create({kind:'text',text:'SECOND'});selectPhoto(0);render();check(LayerEditor.list().length===2&&LayerEditor.list().every(x=>x.text!=='SECOND'),'Photo layers remain isolated in both directions');
+  await TemplateStudio.open();document.querySelector('[data-template="studio-botanical"]').click();await new Promise(r=>setTimeout(r,80));render();check(active().templateId==='studio-botanical'&&state.mode==='template','Template assigned to current photo');selectPhoto(1);render();check(state.mode==='photo'&&active().templateId===null,'Other photo retains no template');selectPhoto(0);render();check(state.mode==='template'&&TemplateStudio.entry().id==='studio-botanical','Switching back restores original template');
+  const modes=state.mode,selection=state.active;const pages=await preparePrintPages();check(pages.length===6&&pages[0].title==='模板'&&pages[1].title==='照片','Batch exports each photo using its own template mode');check(state.mode===modes&&state.active===selection,'Batch generation restores active editor');
+  state.mode='collage';state.active=0;render();check(LayerEditor.list().length===2,'Collage retains selected photo decorations');check(LayerEditor.space().w<logicalSize()[0],'Collage decorations use photo cell coordinates');
+  const withText=compose().toDataURL();const old=active().overlays;active().overlays=[];check(compose().toDataURL()!==withText,'Collage output includes each photo decoration');active().overlays=old;
+  state.media=5014;state.mode='photo';state.active=1;render();check(LayerEditor.list()[0].text==='SECOND'&&LayerEditor.space().y===912,'Split bottom photo has independent layer space');
+  const split=await preparePrintPages();check(split.length===3,'Independent edits retain three-sheet split batch');
+  save();const draft=JSON.parse(localStorage.getItem('liuying-draft'));check(draft.photos[0].filter==='bw'&&draft.photos[1].filter==='none'&&draft.photos[0].templateId==='studio-botanical'&&draft.photos[1].overlays[0].text==='SECOND','Independent settings persist in saved draft');
+  return {passed:checks.length,checks};
+ }finally{closeSheet();state=JSON.parse(snapshot);LayerEditor.select(null);await TemplateStudio.ensureCurrent();render();save();scrollTo(0,0);}
+})()

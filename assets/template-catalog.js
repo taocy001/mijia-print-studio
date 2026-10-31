@@ -1,0 +1,1 @@
+window.TEMPLATE_CATALOG=[];

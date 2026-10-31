@@ -1,0 +1,4 @@
+{
+  "deps/onnxruntime-android-1.23.2.aar": "82048d1f462218adae4ba76477089ab0ba76093d84f733540066db1a8ba6b827",
+  "assets/models/u2netp.onnx": "309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8"
+}
