@@ -17,3 +17,6 @@
 - NumPy：BSD-3-Clause 及其附带组件许可，https://numpy.org/doc/stable/license.html 。
 - ONNX Runtime Python：MIT，来源同前述 ONNX Runtime。
 Mac 蓝牙兼容实现沿用同一 MIT 协议参考；系统 IOBluetooth 框架不随仓库分发。
+
+- pypdf：BSD-3-Clause，https://github.com/py-pdf/pypdf ，仅作为 PDF 拆页依赖安装。
+AirPrint 的 IPP 适配、文档渲染器及合成测试夹具迁自本项目自有实现；未包含厂商二进制、抓包或用户文档。macOS CoreGraphics/CUPS 系统库不随仓库分发。

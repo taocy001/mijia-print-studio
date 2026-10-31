@@ -70,3 +70,37 @@ Android 队列测试：先安装当前 App 并停止共享，运行 `python3 tes
 
 运行 `python3 tests/check_release_assets.py` 检查素材来源和清单，浏览器回归见 `tests/check_release_artwork.py`。
 此仓库尚未推送，未承诺所有适用法域下均无风险；兼容性与发布边界见 `RELEASE_REVIEW.md`。
+
+## Mac AirPrint
+
+`desktop/serve.py` 可单独开启 Web、单独开启 AirPrint，或同时开启两者。
+两者只依赖 `printing/` 的公共队列，不互相导入入口。只有公共核心连接蓝牙；
+同一数据目录或同一打印机的第二个服务会拒绝启动。两入口默认端口分别为 8635、8636。
+
+```sh
+build/venv/bin/python airprint/build_renderer.py
+build/venv/bin/python desktop/serve.py --simulate
+```
+
+`--entry web` / `--entry airprint` 可只启用一个入口。模拟模式不允许 Bonjour 广播。
+真实使用前先停止占用打印机的旧服务，再设置蓝牙地址，去掉 `--simulate`。
+局域网 AirPrint 还需 `--lan --hostname 主机名.local --allow-network 可信网段 --announce`；
+主机名须使用本机实际 Bonjour 名称，网段由用户指定。未传 `--announce` 不广播。
+AirPrint 仅允许列出的可信网段，无账号认证；Web 仍需配对码。两入口均不用于公网。
+
+默认 `--paper auto` 读取实际托盘，支持六寸、三寸方形背胶；
+四寸拼接需显式 `--paper splice`。也可固定 `--paper six` 或 `--paper square`，
+发送前仍校验实际相纸，纸型不匹配拒绝打印。切换纸张后重启服务以刷新公告。
+JPEG、PDF、URF、PWG 离线转换后进入相同队列；PDF 最多六页，拼接按每两页一张纸，
+最后单页重复拼接。URF/PWG 只接受单页，拼接仅接受 JPEG/PDF，不会静默丢页。
+AirPrint 每个任务一份；Web 的多份设置保持原有行为。
+
+文档转换在有超时的独立子进程执行。重复请求返回原任务，重启不自动重发。
+服务退出先停止接单、取消未开始任务，等待正在执行的蓝牙操作结束。
+异常任务保留在服务数据目录，确认结果前暂停；原服务的任务记录不会迁移或重放。
+
+本次仅集成代码并进行模拟测试，未替换旧服务、未广播新打印机、未实物打印。
+AirPrint 在手机上的发现、纸型展示及最终输出仍需人工验收。
+
+离线回归：`python -m unittest discover -s tests -p 'test_airprint*.py'`。
+需要先构建渲染器并安装 `web/requirements.txt`；测试只使用合成图片和临时数据。
