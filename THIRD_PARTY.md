@@ -9,3 +9,11 @@
 - 离线模型 U2NetP（Apache-2.0）、转换参考 rembg（MIT）、ONNX Runtime（MIT）：见 `assets/models/SOURCES.txt` 及同目录许可证。模型和运行时按校验值下载，不纳入 Git。
 
 下载素材的 URL 和 SHA-256 见 `assets/provenance.json`。源码中的素材由本项目独立绘制，未使用官方模板、官方横版衍生图或旧姓名贴、卡片位图。保留第三方版权声明及许可证。
+
+电脑服务通过 `web/requirements.txt` 安装依赖，不将其二进制或源码打包进 Git：
+- aiohttp：Apache-2.0，https://github.com/aio-libs/aiohttp 。
+- Pillow：MIT-CMU，https://github.com/python-pillow/Pillow 。
+- PyCryptodome：BSD/Public Domain，https://www.pycryptodome.org/src/license 。
+- NumPy：BSD-3-Clause 及其附带组件许可，https://numpy.org/doc/stable/license.html 。
+- ONNX Runtime Python：MIT，来源同前述 ONNX Runtime。
+Mac 蓝牙兼容实现沿用同一 MIT 协议参考；系统 IOBluetooth 框架不随仓库分发。

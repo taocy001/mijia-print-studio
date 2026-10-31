@@ -7,12 +7,12 @@ import java.io.*;
 import java.nio.file.Files;
 import org.json.*;
 
-public final class PrintService extends Service {
+public class PrintService extends Service {
     private JSONObject job;
     private boolean stopBatch=false;
     private PowerManager.WakeLock wake;
     @Override public IBinder onBind(Intent intent){return null;}
-    private Notification notice(String text){
+    protected Notification notice(String text){
         Intent open=new Intent(this,MainActivity.class);
         PendingIntent pending=PendingIntent.getActivity(this,0,open,PendingIntent.FLAG_IMMUTABLE|PendingIntent.FLAG_UPDATE_CURRENT);
         return new Notification.Builder(this,"print").setSmallIcon(R.drawable.icon).setContentTitle("留影工坊")
@@ -22,16 +22,21 @@ public final class PrintService extends Service {
         job.put("phase",phase).put("message",message).put("progress",progress).put("updatedAt",System.currentTimeMillis());
         if(job.optInt("batchCount",1)>1){message="第 "+job.optInt("batchIndex",1)+" / "+job.optInt("batchCount",1)+" 个作品 · "+message;job.put("message",message);}
         Store.message=message;Store.write(this,"job.json",job);
-        getSystemService(NotificationManager.class).notify(1,notice(message));
+        getSystemService(NotificationManager.class).notify(notificationId(),notice(message));
     }
     @Override public int onStartCommand(Intent intent,int flags,int startId){
         NotificationManager manager=getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel("print","照片打印",NotificationManager.IMPORTANCE_LOW));
         startForeground(1,notice("正在连接打印机…"));
         if(intent==null){stopSelf();return START_NOT_STICKY;}
-        String action=intent.getStringExtra("action");
-        if("cancel".equals(action)&&Store.busy){Store.cancel=true;return START_NOT_STICKY;}
-        synchronized(Store.LOCK){if(Store.busy){return START_NOT_STICKY;}Store.busy=true;Store.cancel=false;}
+        execute(intent.getStringExtra("action"));return START_NOT_STICKY;
+    }
+    protected int notificationId(){return 1;}
+    protected void finished(){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();}
+    protected void execute(String action){
+
+        if("cancel".equals(action)&&Store.busy){Store.cancel=true;return;}
+        synchronized(Store.LOCK){if(Store.busy){return;}Store.busy=true;Store.cancel=false;stopBatch=false;job=null;}
         wake=getSystemService(PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"liuying:print");wake.acquire(600000);
         new Thread(()->{
             try(Printer printer=new Printer(this)){
@@ -59,10 +64,9 @@ public final class PrintService extends Service {
                 catch(Exception ignored){}android.util.Log.e("LiuyingPrint","Print failed",e);
             }finally{
                 synchronized(Store.LOCK){Store.busy=false;Store.cancel=false;}
-                if(wake!=null&&wake.isHeld())wake.release();stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();
+                if(wake!=null&&wake.isHeld())wake.release();finished();
             }
         },"liuying-print").start();
-        return START_NOT_STICKY;
     }
     private static String friendly(Exception e){String text=e.getMessage();return text==null?"蓝牙连接中断":text;}
     private void startPrint(Printer printer)throws Exception{

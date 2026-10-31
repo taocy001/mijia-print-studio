@@ -1,5 +1,6 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="local.liuying.studio" android:versionCode="19" android:versionName="1.18">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="local.liuying.studio" android:versionCode="20" android:versionName="1.19">
   <uses-sdk android:minSdkVersion="31" android:targetSdkVersion="36" />
+  <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
   <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -10,6 +11,7 @@
     <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize" android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden">
       <intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter>
     </activity>
+    <service android:name=".SharingService" android:exported="false" android:foregroundServiceType="connectedDevice" />
     <service android:name=".PrintService" android:exported="false" android:foregroundServiceType="connectedDevice" />
   </application>
 </manifest>

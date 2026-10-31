@@ -1,6 +1,6 @@
-# 留影工坊 Android
+# 留影工坊
 
-独立的本地照片编辑与蓝牙打印 App。支持米家桌面照片打印机 2；非官方项目。
+共用编辑器的 Android App 与浏览器打印页面。支持米家桌面照片打印机 2；非官方项目。
 
 ## 构建
 
@@ -12,7 +12,7 @@ python3 fetch_deps.py
 python3 build.py
 ```
 
-输出 `build/liuying-studio.apk`。构建无需 Web 或 AirPrint 项目。依赖下载后可离线构建；App 不请求联网权限。
+输出 `build/liuying-studio.apk`。构建无需 Web 或 AirPrint 项目。依赖下载后可离线构建；App 的网络权限仅用于用户开启的本机与局域网共享服务。
 
 首次构建生成本地调试密钥；密钥与安装包不提交。已安装版本的覆盖更新需要沿用原签名密钥。
 
@@ -23,10 +23,44 @@ python3 build.py
 证件照提供离线抠图和白、蓝、红底，保留原图。复杂边缘需检查预览。
 打印结果不明确时不自动重印。蓝牙实现仅适用于经过授权的设备。
 
+## 浏览器共享
+
+App 的「更多 → 共享打印」可开启本机访问或同一 Wi-Fi 共享。
+本机浏览器访问 `http://127.0.0.1:8634`；其他设备使用 App 显示的局域网地址，输入配对码。
+照片、草稿和任务按浏览器会话隔离。打印共用串行队列；结果未知时暂停，不自动重印。
+停止共享会撤销配对、取消尚未开始的远程任务；已开始的批次继续由通知中的服务管理。
+需在解锁后的 App 前台开启，后台运行保留通知；系统强制停止或省电限制可能中断服务。
+
+`assets/` 是两端唯一编辑器源文件；Android 原生能力在 `src/`。接口与迁移边界见 `web/CONTRACT.md`。
+电脑服务入口为 `web/serve.py`，独立蓝牙后端与 Android 共用网页代码、素材和打印数据格式。原有 Web、AirPrint/AirDrop 服务未改动。
+
+## 电脑服务
+
+需要 Python 3.11+，真实蓝牙打印需要 macOS 与 Xcode Command Line Tools。
+
+```sh
+python3 -m venv build/venv
+build/venv/bin/pip install -r web/requirements.txt
+python3 web/build_bluetooth.py
+build/venv/bin/python web/serve.py --simulate
+```
+
+默认地址 `http://127.0.0.1:8635`，配对码显示在终端。`--simulate` 只模拟任务，不会连接打印机。
+真实打印先在系统配对打印机，再设置 `MIJIA_BLUETOOTH_ADDRESS`，去掉 `--simulate` 启动。
+加 `--lan` 可提供局域网访问；数据默认保存在用户目录的 `Library/Application Support/LiuyingStudio`，不在仓库中。
+照片合成在浏览器完成，电脑后端负责导入、抠图与蓝牙传输。HEIC 导入调用 macOS 系统图片转换工具。
+抠图使用同一份 U2NetP 模型；模型未准备时执行 `python3 fetch_deps.py`，其余编辑功能不依赖模型。
+
+打印结果未知时保留任务记录并暂停队列，不能直接重试；电脑端的异常记录仍需在服务端核对处理。
+现有电脑 Web 服务继续保留。新入口不复制旧布局代码，采用共用编辑器，尚未替换原服务。
+
 ## 测试
 
 `tests/` 包含浏览器、原生辅助类和设备验证脚本。浏览器测试需要 Playwright 与 Pillow；打印接口被拦截。
 `tests/cdp.mjs` 用于通过 ADB 转发的 App 调试页面操作。设备测试前保存草稿，完成后恢复；不自动执行实物打印。
+
+浏览器与模拟服务回归：`tests/check_browser_transport.py`、`tests/check_desktop_web.py`。
+Android 队列测试：先安装当前 App 并停止共享，运行 `python3 tests/run_android_queue_test.py`，测试只在临时目录操作，不调用蓝牙。
 
 ## 发布仓库
 

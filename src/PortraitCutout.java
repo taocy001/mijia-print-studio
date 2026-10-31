@@ -10,7 +10,7 @@ import java.util.*;
 import org.json.JSONObject;
 /** Offline U2NetP segmentation. Original imported photos are never overwritten. */
 final class PortraitCutout {
- static JSONObject process(Context context,String source)throws Exception{
+ static synchronized JSONObject process(Context context,String source)throws Exception{
   if(source==null||!source.matches("/private/(photos|prints)/[A-Za-z0-9-]+\\.jpg"))throw new IOException("请选择已导入的照片");
   File file=new File(context.getFilesDir(),source.substring(9));
   if(!file.getCanonicalPath().startsWith(context.getFilesDir().getCanonicalPath()+"/")||!file.isFile())throw new IOException("原照片不存在，请重新导入");

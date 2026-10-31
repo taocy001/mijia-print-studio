@@ -13,10 +13,10 @@ window.CropEditor=(()=>{
    const g=photoGeometry(frame.p,frame.w,frame.h,frame.fit);
    const x=frame.x+(frame.w-g.dw)/2+g.dx,y=frame.y+(frame.h-g.dh)/2+g.dy;
    tx=-Math.min(0,x);ty=-Math.min(0,y);cw=Math.ceil(Math.max(w,x+g.dw)+tx);ch=Math.ceil(Math.max(h,y+g.dh)+ty);
-   if(document.body.classList.contains('landscape')){const r=$('board').getBoundingClientRect();width=Math.min(r.width/cw,r.height/ch)*cw;stage.style.width=width+'px';}
+   if((document.body.classList.contains('landscape')||(!!window.BrowserTransport&&innerWidth>=1000&&matchMedia('(pointer:fine)').matches))){const r=$('board').getBoundingClientRect();width=Math.min(r.width/cw,r.height/ch)*cw;stage.style.width=width+'px';}
    else{stage.style.removeProperty('width');width=stage.clientWidth||411;}
   }else{
-   if(document.body.classList.contains('landscape')){
+   if((document.body.classList.contains('landscape')||(!!window.BrowserTransport&&innerWidth>=1000&&matchMedia('(pointer:fine)').matches))){
     const rect=$('board').getBoundingClientRect(),scale=Math.max(.01,Math.min((rect.width-12)/w,(rect.height-12)/h));
     pad=Math.max(1,Math.round(6/scale));width=(w+pad*2)*scale;stage.style.width=width+'px';
    }else{stage.style.removeProperty('width');width=stage.clientWidth||411;pad=Math.round(w*12/Math.max(1,width-24));}
@@ -37,7 +37,7 @@ window.CropEditor=(()=>{
  function choose(p){return photoFrames.find(f=>p.x>=f.x&&p.x<=f.x+f.w&&p.y>=f.y&&p.y<=f.y+f.h)||frame;}
  let target=null;
  function move(now,old,multi){if(!target||peek)return;const {p,w,h,fit}=target,g=photoGeometry(p,w,h,fit),direction=state.mode==='photo'&&[5009,5012].includes(state.media)?-1:1;if(g.ex)p.x=Math.max(-1,Math.min(1,(p.x||0)+direction*(now.x-old.x)/g.ex));if(multi&&g.ey)p.y=Math.max(-1,Math.min(1,(p.y||0)+direction*(now.y-old.y)/g.ey));if(multi&&old.d&&now.d)p.zoom=Math.max(1,Math.min(4,(p.zoom||1)*now.d/old.d));schedule();}
- canvas.addEventListener('touchstart',e=>{if(!view||peek)return;previous=geometry(e.touches);if(e.touches.length===1){start=previous;target=choose(start);axis=target&&((target.p.zoom||1)>1.001||document.body.classList.contains('landscape'))?'photo':null;if(axis==='photo')e.preventDefault();}else{e.preventDefault();axis='multi';target=target||frame;}},{passive:false});
+ canvas.addEventListener('touchstart',e=>{if(!view||peek)return;previous=geometry(e.touches);if(e.touches.length===1){start=previous;target=choose(start);axis=target&&((target.p.zoom||1)>1.001||(document.body.classList.contains('landscape')||(!!window.BrowserTransport&&innerWidth>=1000&&matchMedia('(pointer:fine)').matches)))?'photo':null;if(axis==='photo')e.preventDefault();}else{e.preventDefault();axis='multi';target=target||frame;}},{passive:false});
  canvas.addEventListener('touchmove',e=>{if(!previous||!view)return;const now=geometry(e.touches);if(now.n>1){e.preventDefault();move(now,previous,true);previous=now;axis='multi';return;}
   // Native vertical scrolling wins. Horizontal drags are edited directly, without a mode switch.
   if(!axis&&start){const dx=now.x-start.x,dy=now.y-start.y,threshold=8*canvas.width/canvas.clientWidth;if(Math.hypot(dx,dy)>threshold)axis=Math.abs(dx)>Math.abs(dy)*1.2?'horizontal':'scroll';}
