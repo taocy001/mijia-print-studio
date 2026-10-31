@@ -41,6 +41,18 @@ class StatusTests(unittest.IsolatedAsyncioTestCase):
    finally:finish.set()
    with self.assertRaises(asyncio.CancelledError):await task
    self.assertFalse(self.core.io_lock.locked())
+ async def test_successful_queries_share_connection_until_shutdown(self):
+  with patch.object(self.core,'printer',return_value=self.printer()) as factory:
+   await self.core.status();await self.core.status();await self.core.status()
+   self.assertEqual(factory.call_count,1)
+   await self.core.stop(None)
+   self.assertIsNone(self.core.device_printer)
+ async def test_broken_connection_is_closed_before_reconnect(self):
+  bad=self.printer();good=self.printer()
+  with patch.object(bad,'get_prop',side_effect=OSError('disconnected')),patch.object(bad,'close') as close,patch.object(self.core,'printer',side_effect=[bad,good]) as factory:
+   with self.assertRaises(UserError):await self.core.status()
+   close.assert_called_once();self.assertIsNone(self.core.device_printer)
+   await self.core.status();self.assertEqual(factory.call_count,2);self.assertTrue(self.core.device['connected'])
  async def test_status_handshake_has_bounded_retry(self):
   from printing.bluetooth_printer import BluetoothPrinter
   with patch('printing.bluetooth_printer.BluetoothClient') as client:

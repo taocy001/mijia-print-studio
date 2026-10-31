@@ -16,7 +16,7 @@ def atomic(path,value):
 class PrintService:
     def __init__(self,data,simulate=False,address=None):
         self.data=Path(data);self.data.mkdir(parents=True,exist_ok=True,mode=0o700);self.simulate=simulate;self.address=address
-        self.device={};self.queue=asyncio.Queue();self.io_lock=asyncio.Lock();self.lock=asyncio.Lock();self.paused=False;self.cancel_flags={}
+        self.device={};self.queue=asyncio.Queue();self.io_lock=asyncio.Lock();self.lock=asyncio.Lock();self.paused=False;self.cancel_flags={};self.device_printer=None
         self._locks=[]
         self._acquire(self.data/'service.lock')
         if not simulate:
@@ -40,6 +40,12 @@ class PrintService:
     def printer(self,status=False):
         from .bluetooth_printer import BluetoothPrinter
         return BluetoothPrinter(self.address,ROOT/'build/desktop-bluetooth.app/Contents/MacOS/transport',os.environ.get('MIJIA_RFCOMM_CHANNEL','1'),self.data/'bluetooth-state',status_only=status)
+    def connection(self,status=False):
+        if self.device_printer is None:self.device_printer=self.printer(status)
+        return self.device_printer
+    def disconnect(self):
+        printer,self.device_printer=self.device_printer,None
+        if printer is not None:printer.close()
     async def start(self,app):
         self.worker=asyncio.create_task(self.work())
         self.monitor=asyncio.create_task(self.monitor_status()) if not self.simulate else None
@@ -58,7 +64,7 @@ class PrintService:
         for job in self.jobs:
             if job['phase']=='queued':job.update(phase='cancelled',message='服务停止，尚未开始的任务已取消')
         self.save()
-        async with self.io_lock:pass
+        async with self.io_lock:await asyncio.to_thread(self.disconnect)
         self.worker.cancel()
         try:await self.worker
         except asyncio.CancelledError:pass
@@ -83,7 +89,7 @@ class PrintService:
     def send(self,job):
         cancel=self.cancel_flags[job['token']]
         if cancel.is_set():return 'cancelled'
-        printer=self.printer()
+        printer=self.connection()
         try:
             for page in job['pages']:
                 if cancel.is_set():return 'cancelled'
@@ -91,16 +97,18 @@ class PrintService:
                 if page.get('ocFile'):files.insert(0,(self.data/page['ocFile']).read_bytes())
                 if not printer.print_photo(files,copies=page['copies'],sharpen=page['sharpen'],media_size=page['media'],log=lambda _:None,on_cancel=cancel.is_set):return 'cancelled' if printer.last_state==8 else 'aborted'
             return 'done'
-        finally:printer.close()
+        except Exception:
+            self.disconnect();raise
     async def status(self):
         if self.simulate:self.device={'connected':True,'state':'30','alert':'::0','ribbon':-1,'media':5012,'checkedAt':int(time.time()*1000)};return
         if self.io_lock.locked():return
         async with self.io_lock:
             def read():
-                p=self.printer(True)
+                p=self.connection(True)
                 try:
                     v=p.get_prop('printer-state','printer-state-alerts','media-size','ribbon-info');return dict(connected=True,state=str(v[0]),alert=v[1],media=v[2]['media-size'],ribbon=v[3].get('ribbon-info',[0,0,-1])[2],checkedAt=int(time.time()*1000))
-                finally:p.close()
+                except Exception:
+                    self.disconnect();raise
             task=asyncio.create_task(asyncio.to_thread(read))
             try:self.device=await asyncio.shield(task)
             except asyncio.CancelledError:
@@ -147,7 +155,7 @@ class PrintService:
         own=next((j for j in self.jobs if j['owner']==session['id'] and j['phase']=='uncertain'),None)
         if own is None:return {'ok':True}
         def reconcile():
-            printer=self.printer(True)
+            printer=self.connection(True)
             try:
                 if not printer.intent.exists():raise UserError('未发现待确认记录，请在打印机端核对结果')
                 record=json.loads(printer.intent.read_text());identifier=record.get('job')
@@ -157,7 +165,8 @@ class PrintService:
                 phase={9:'done',8:'cancelled',7:'aborted'}.get(found[0].get('job-state'),'uncertain')
                 if phase!='uncertain':printer.intent.unlink()
                 return phase,identifier
-            finally:printer.close()
+            except Exception:
+                self.disconnect();raise
         async with self.io_lock:phase,identifier=await asyncio.to_thread(reconcile)
         own.update(phase=phase,jobId=identifier,message='已确认原任务结束' if phase!='uncertain' else '原任务仍未结束，请检查打印机')
         self.paused=any(j['phase']=='uncertain' for j in self.jobs);self.save();return {'ok':True}
