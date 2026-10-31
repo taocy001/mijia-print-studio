@@ -1,5 +1,5 @@
 from pathlib import Path
-import json,mimetypes
+import json,mimetypes,time
 from urllib.parse import urlparse
 from playwright.sync_api import sync_playwright
 root=Path(__file__).resolve().parents[1];assets=root/'assets'
@@ -8,7 +8,7 @@ with sync_playwright() as p:
  page.on('pageerror',lambda e:errors.append(str(e)))
  def route(r):
   name=urlparse(r.request.url).path
-  if name=='/api/state':r.fulfill(json={'permission':True,'device':{},'history':[]});return
+  if name=='/api/state':r.fulfill(json={'permission':True,'device':{'connected':True,'media':5012,'checkedAt':int(time.time()*1000)},'history':[]});return
   if name=='/api/print':
    requests.append(json.loads(r.request.post_data))
    if len(requests)==1:r.abort('connectionreset')

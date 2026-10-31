@@ -57,3 +57,11 @@ IPP 实现参考 RFC 8011：https://www.rfc-editor.org/rfc/rfc8011.html 。
 支持 Print-Job、Validate-Job、Create-Job/Send-Document、Get-Printer-Attributes、
 Get-Jobs、Get-Job-Attributes、Cancel-Job；单文档任务，按来源地址隔离任务查询。
 IP 隔离不等于身份认证，AirPrint 只向明确允许的可信网段开放。
+
+
+相纸以 `device.media` 的实际纸盒为准（5009 / 5012）；5014 为六寸纸盒上的拼接输出。
+`device.checkedAt` 超过 150 秒后，编辑器暂停打印提交。
+`POST /api/release` 停止后台探测并释放蓝牙；有未完成任务时拒绝。
+`POST /api/connect` 重新启用连接与状态刷新。
+`POST /api/airprint-layout` 接收布尔值 `splice`，仅检测到六寸时允许修改；
+`GET /api/state` 返回 `airprintSplice`。该设置只影响后续 AirPrint 任务，Web 编辑作品保持各自排版。

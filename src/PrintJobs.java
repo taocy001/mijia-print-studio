@@ -17,6 +17,7 @@ final class PrintJobs {
    JSONArray all=records(context);String hash=digest(payload);int pending=0;
    for(int i=0;i<all.length();i++){JSONObject r=all.getJSONObject(i);if(owner.equals(r.optString("owner"))&&requestId.equals(r.optString("requestId"))){if(!hash.equals(r.optString("digest")))throw new IOException("请求内容已变化，请重新预览");return new JSONObject().put("ok",true).put("duplicate",true);}
     if("queued".equals(r.optString("phase")))pending++;}
+   if(PrinterStatus.released)throw new IOException("蓝牙已释放，请先连接手机");
    if(pending>=12||all.length()>=128)throw new IOException("共享队列已满，请在手机上处理后重试");
    JSONObject first=prepare(context,owner,requestId,payload);first.put("phase","queued").put("message","已加入打印队列").put("digest",hash);all.put(first);persist(context,all);
    return new JSONObject().put("ok",true);
@@ -68,12 +69,13 @@ final class PrintJobs {
    if(owner.equals(current.optString("owner")))own=current;
    for(int i=0;i<all.length();i++){JSONObject record=all.getJSONObject(i);if("queued".equals(record.optString("phase"))){position++;if(owner.equals(record.optString("owner"))&&(!own.has("token")||Store.terminal(own))){own=new JSONObject(record.toString());own.put("message","等待打印 · 队列第 "+position+" 个");}}}
    JSONArray stored=Store.read(c,"history.json").optJSONArray("items");if(stored!=null)for(int i=0;i<stored.length();i++)if(owner.equals(stored.getJSONObject(i).optString("owner")))history.put(publicJob(stored.getJSONObject(i)));
-   boolean unresolved=own.has("token")&&!Store.terminal(own);return new JSONObject().put("permission",true).put("busy",Store.busy&&owner.equals(current.optString("owner"))&&!Store.terminal(current)).put("unresolved",unresolved).put("job",publicJob(own)).put("history",history).put("device",publicDevice()).put("message",own.optString("message",Store.message));
+   boolean unresolved=own.has("token")&&!Store.terminal(own);return new JSONObject().put("airprintSplice",PrinterStatus.splice).put("permission",true).put("busy",Store.busy&&owner.equals(current.optString("owner"))&&!Store.terminal(current)).put("unresolved",unresolved).put("job",publicJob(own)).put("history",history).put("device",publicDevice()).put("message",own.optString("message",Store.message));
   }
  }
- private static JSONObject publicDevice()throws Exception{JSONObject out=new JSONObject();for(String key:new String[]{"connected","name","state","alert","media","ribbon","checkedAt"})if(Store.device.has(key))out.put(key,Store.device.get(key));return out;}
+ private static JSONObject publicDevice()throws Exception{JSONObject out=new JSONObject();for(String key:new String[]{"connected","released","name","state","alert","media","ribbon","checkedAt"})if(Store.device.has(key))out.put(key,Store.device.get(key));return out;}
  private static JSONObject publicJob(JSONObject job)throws Exception{JSONObject out=new JSONObject();for(String key:new String[]{"token","phase","message","progress","file","title","media","orientation","createdAt","copies","batchIndex","batchCount","jobId"})if(job.has(key))out.put(key,job.get(key));return out;}
- static void cancelWaiting(Context c)throws Exception{synchronized(Store.LOCK){JSONArray all=records(c);for(int i=0;i<all.length();i++){JSONObject r=all.getJSONObject(i);if("queued".equals(r.optString("phase")))r.put("phase","cancelled").put("message","共享已停止，尚未打印的任务已取消");}persist(c,all);}}
+ static void cancelWaiting(Context c)throws Exception{cancelWaiting(c,null);}
+ static void cancelWaiting(Context c,Boolean airprint)throws Exception{synchronized(Store.LOCK){JSONArray all=records(c);for(int i=0;i<all.length();i++){JSONObject r=all.getJSONObject(i);if("queued".equals(r.optString("phase"))&&(airprint==null||r.optString("owner").startsWith("ipp-")==airprint))r.put("phase","cancelled").put("message","共享已停止，尚未打印的任务已取消");}persist(c,all);}}
  static void cancel(Context c,String owner)throws Exception{
   synchronized(Store.LOCK){JSONArray all=records(c);for(int i=0;i<all.length();i++){JSONObject r=all.getJSONObject(i);if(owner.equals(r.optString("owner"))&&"queued".equals(r.optString("phase")))r.put("phase","cancelled");}persist(c,all);
    JSONObject current=Store.read(c,"job.json");if(owner.equals(current.optString("owner"))&&!Store.terminal(current)){if(Store.busy)Store.cancel=true;else if("prepared".equals(current.optString("phase"))){current.put("phase","cancelled");Store.write(c,"job.json",current);}else throw new IOException("请在手机上检查当前任务");}

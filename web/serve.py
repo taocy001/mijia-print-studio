@@ -42,7 +42,7 @@ class Studio:
             if r.path=='/api/state':
                 own=[j for j in self.core.jobs if j['owner']==session['id']];waiting=[j for j in own if j['phase'] in ('queued','printing','uncertain')];job=waiting[0] if waiting else own[-1] if own else {};public=self.core.public(job)
                 if job.get('phase')=='queued' and self.core.paused:public['message']='共享队列已暂停，请在服务端检查'
-                return web.json_response(dict(permission=True,host='desktop',simulation=self.simulate,busy=job.get('phase')=='printing',unresolved=bool(waiting),job=public,history=[self.core.public(j) for j in reversed(own) if j['phase']=='done'][:20],device=self.core.device,message=public.get('message','电脑共享服务已连接')))
+                return web.json_response(dict(permission=True,host='desktop',airprintSplice=self.core.airprint_splice,simulation=self.simulate,busy=job.get('phase')=='printing',unresolved=bool(waiting),job=public,history=[self.core.public(j) for j in reversed(own) if j['phase']=='done'][:20],device=self.core.device,message=public.get('message','电脑共享服务已连接')))
             if r.path=='/session.js':return web.Response(text='window.STUDIO_DRAFT_KEY='+json.dumps('liuying-draft-'+session['id'])+';',content_type='application/javascript')
             if r.path.startswith('/private/'):
                 if r.path not in session['files']:raise web.HTTPNotFound()
@@ -66,7 +66,12 @@ class Studio:
             if source not in session['files'] or not source.startswith(('/private/photos/','/private/prints/')):raise UserError('照片不存在')
             async with self.core.io_lock:outputs=await asyncio.to_thread(cutout,self.data/source[9:],self.data/'cutouts',ROOT/'assets/models/u2netp.onnx')
             result={c:'/private/cutouts/'+p.name for c,p in outputs.items()};session['files'].update(result.values());return web.json_response({'images':result})
-        if r.path=='/api/connect':await self.core.status();return web.json_response({'ok':True})
+        if r.path=='/api/connect':await self.core.connect();return web.json_response({'ok':True})
+        if r.path=='/api/release':await self.core.release();return web.json_response({'ok':True})
+        if r.path=='/api/airprint-layout':
+            if self.core.device.get('media')!=5012 or not self.core.device.get('connected'):raise UserError('检测到六寸纸盒后才能设置拼接')
+            if type(body.get('splice')) is not bool:raise UserError('拼接参数无效')
+            self.core.airprint_splice=body['splice'];return web.json_response({'ok':True})
         if r.path=='/api/cancel':return web.json_response(await self.core.cancel(session))
         if r.path=='/api/reconcile':return web.json_response(await self.core.reconcile(session))
         raise web.HTTPNotFound()

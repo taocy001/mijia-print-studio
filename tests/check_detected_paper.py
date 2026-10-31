@@ -8,7 +8,7 @@ root=Path(__file__).resolve().parents[1];assets=root/'assets'
 with sync_playwright() as p:
  b=p.chromium.launch();page=b.new_page(viewport={'width':411,'height':828},is_mobile=True,has_touch=True);errors=[]
  page.on('pageerror',lambda e:errors.append(str(e)))
- page.add_init_script("window.Studio={state:()=>JSON.stringify({permission:true,device:{connected:true,media:5009},history:[]}),printBatch:()=>{throw Error('Printing is forbidden in tests')}}")
+ page.add_init_script("window.Studio={state:()=>JSON.stringify({permission:true,device:{connected:true,checkedAt:Date.now(),media:5009},history:[]}),printBatch:()=>{throw Error('Printing is forbidden in tests')}}")
  def route(r):
   path=unquote(urlparse(r.request.url).path);file=assets/(path.lstrip('/') or 'index.html')
   if path.startswith('/private/'):
@@ -24,24 +24,27 @@ with sync_playwright() as p:
   page.evaluate("window.testDevice={};Studio.state=()=>JSON.stringify({permission:true,device:testDevice});poll();openPaper()")
   assert page.locator('[data-paper]').count()==0
   assert page.locator('#paperBtn').inner_text()=='识别相纸'
-  page.evaluate("testDevice={connected:true,media:5009};poll();render()")
+  page.evaluate("testDevice={connected:true,checkedAt:Date.now(),media:5009};poll();render()")
   assert page.evaluate('state.media')==5009
   assert page.locator('[data-paper]').count()==0
-  page.evaluate("testDevice={connected:true,media:5012};poll();render();openPaper()")
+  page.evaluate("testDevice={connected:true,checkedAt:Date.now(),media:5012};poll();render();openPaper()")
   assert page.locator('[data-paper]').count()==2
   page.locator('[data-paper="5014"]').click()
   assert page.evaluate('state.media')==5014
   page.evaluate('poll()');assert page.evaluate('state.media')==5014
   page.evaluate('confirmPrint()');assert page.locator('#confirmSend').is_enabled()
-  page.evaluate("testDevice={connected:true,media:5009};poll()")
+  page.evaluate("testDevice={connected:true,checkedAt:Date.now(),media:5009};poll()")
   assert page.evaluate('state.media')==5009
   assert page.evaluate('pendingPrint') is None
   assert page.evaluate("sheetKind!=='confirm'")
-  page.evaluate("testDevice={connected:true,media:5012};poll();render()")
+  page.evaluate("testDevice={connected:true,checkedAt:Date.now(),media:5012};poll();render()")
   assert page.evaluate('state.media')==5014
   page.evaluate('confirmPrint()')
   page.evaluate('testDevice={connected:false,media:5012};poll()')
   assert page.locator('#confirmSend').is_disabled()
+  page.evaluate('closeSheet();testDevice={connected:true,media:5009,checkedAt:Date.now()-151000};poll();openPaper()')
+  assert page.locator('[data-paper]').count()==0
+  assert page.locator('#paperBtn').inner_text()=='识别相纸'
   page.evaluate('closeSheet()')
  assert not errors,errors
  print('Detected paper: unknown, square, six/splice, tray changes and disconnected confirmation passed at mobile and desktop sizes')

@@ -89,8 +89,9 @@ build/venv/bin/python desktop/serve.py --simulate
 AirPrint 仅允许列出的可信网段，无账号认证；Web 仍需配对码。两入口均不用于公网。
 
 默认 `--paper auto` 读取实际托盘，支持六寸、三寸方形背胶；
-四寸拼接需显式 `--paper splice`。也可固定 `--paper six` 或 `--paper square`，
-发送前仍校验实际相纸，纸型不匹配拒绝打印。切换纸张后重启服务以刷新公告。
+检测到六寸纸盒时，可在 Web 的打印机面板设置 AirPrint 整张六寸或两张四寸拼接；
+也可使用 `--paper splice` 设置启动默认值。三寸纸盒始终输出三寸，不再提供强制纸型参数。
+相纸状态定期刷新，发送前再次校验；不需要因换纸重启服务。
 JPEG、PDF、URF、PWG 离线转换后进入相同队列；PDF 最多六页，拼接按每两页一张纸，
 最后单页重复拼接。URF/PWG 只接受单页，拼接仅接受 JPEG/PDF，不会静默丢页。
 AirPrint 每个任务一份；Web 的多份设置保持原有行为。
@@ -103,6 +104,24 @@ AirPrint 在手机上的发现及最终输出仍需人工验收；离线测试�
 
 离线回归：`python -m unittest discover -s tests -p 'test_airprint*.py'`。
 需要先构建渲染器并安装 `web/requirements.txt`；测试只使用合成图片和临时数据。
+
+## 手机 AirPrint
+
+App「更多 → 共享打印」可独立开启 AirPrint（8637 端口）。
+同一 Wi-Fi 的 iPhone、Mac 可发现「留影工坊 · 手机」，通过系统打印菜单提交。
+Web 与 AirPrint 共用手机队列，可同时开启、分别关闭；关闭一个入口只取消该入口尚未开始的任务。
+AirPrint 不使用 Web 配对码，仅在可信局域网开启。后台运行保留通知。
+
+手机独立解析 IPP，转换 JPEG、PDF、单页 URF/PWG，不依赖 Mac。
+PDF 最多六页；四寸拼接仅支持 JPEG/PDF，每两页一张纸，奇数页重复最后一张。
+仅接受单份、单面、8 位灰度或 sRGB 栅格；不支持的参数明确拒绝。
+未连接、纸型未知、状态过期或蓝牙已释放时不接单。最终发送仍重新读取纸盒。
+协议参考 [IPP 指南](https://www.pwg.org/ipp/ippguide.html) 和
+[CUPS 栅格格式](https://openprinting.github.io/cups/libcups/spec-raster.html)。
+
+`tests/AirPrintProtocolTest.java` 覆盖 IPP 和栅格；
+`python3 tests/run_android_airprint_test.py` 使用手机隔离目录验证转换与队列，不启动蓝牙。
+实机已验证 Mac 发现、HTTP/IPP 查询、后台与独立开关；iPhone 系统打印操作及纸面输出仍需人工验收。
 
 ## 编辑功能对齐
 
@@ -123,3 +142,7 @@ AirPrint 在手机上的发现及最终输出仍需人工验收；离线测试�
 不公告未经确认的已装纸型；恢复后自动更新。`--printer-name` 可保留原 Bonjour 名称。
 
 公共服务复用蓝牙连接，状态查询、打印和结果核对串行使用同一连接；断线后清理并重连，关停时释放设备锁。
+
+打印机面板提供「释放蓝牙给其他设备」。释放后暂停该设备的自动探测，重新点「连接并刷新状态」才恢复。
+从 Mac 切换到手机时先在 Mac Web 释放，再在手机连接；切回时顺序相反。不会强行断开另一台设备。
+手机连接成功后在 App 前台或共享服务运行期间定期读取状态；超过 150 秒未确认的纸型不允许提交打印。

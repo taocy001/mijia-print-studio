@@ -168,7 +168,7 @@ function updateStatus(){
  if(j.token){$('jobLabel').textContent=j.message||native.message;$('jobProgress').style.width=(j.progress||0)+'%';$('jobAction').textContent=native.unresolved?'检查任务':'详情';}
  if(j.phase==='done'&&lastJobPhase&&lastJobPhase!=='done')toast('打印完成，去取你的照片吧。');lastJobPhase=j.phase;
 }
-function detectedPaper(){const d=native.device||{};return d.connected&&[5009,5012].includes(+d.media)?+d.media:0;}
+function detectedPaper(){const d=native.device||{};return d.connected&&Date.now()-d.checkedAt<150000&&[5009,5012].includes(+d.media)?+d.media:0;}
 function syncPaper(){
  const tray=detectedPaper(),media=tray===5009?5009:tray===5012?(state.sixLayout===5014?5014:5012):state.media;
  if(media!==state.media){state.media=media;if(media===5014&&state.mode==='collage')state.mode='photo';if(pendingPrint){closeSheet();toast('相纸已变化，请重新预览');}schedule();}
@@ -199,7 +199,7 @@ function openPaper(){
  const html=tray===5012?[5012,5014].map(key=>`<button class="paper-option ${state.media===key?'active':''}" data-paper="${key}"><span class="paper-shape ${key===5014?'split':''}"></span><span><strong>${key===5012?'整张 6 寸':'两张 4 寸拼接'}</strong></span><span class="check">${state.media===key?icon('check'):''}</span></button>`).join(''):`<p class="hint">${tray===5009?'已检测到 3 寸方形背胶纸':'尚未识别相纸，请连接打印机读取纸盒'}</p>`;
  openSheet('paper',tray?'已检测 · '+PAPER[tray][0]:'识别相纸',html+'<button class="full-button secondary-button" id="connectNow">重新检测</button>');
 }
-function openDevice(){const d=native.device||{};openSheet('device','你的打印机',`<div class="info-row"><span>设备</span><strong>米家桌面照片机 2</strong></div><div class="info-row"><span>连接</span><strong>${d.connected?'蓝牙直连 · 已读取状态':'尚未读取状态'}</strong></div><div class="info-row"><span>检测到的相纸</span><strong>${detectedPaper()?PAPER[detectedPaper()][0]:'待识别'}</strong></div><div class="info-row"><span>色带余量</span><strong>${d.ribbon>=0?d.ribbon+' 张':'等待设备提供有效读数'}</strong></div>${d.alert&&d.alert!=='::0'?`<p class="hint">设备告警：${esc(d.alert)}</p>`:''}<button class="full-button" id="connectNow">${icon('printer')} 连接并刷新状态</button><button class="full-button secondary-button" id="changePaper">相纸与拼接</button><button class="full-button secondary-button" id="systemBluetooth">打开系统蓝牙设置</button><p class="hint">请保持打印机开机，并关闭米家的打印机页面。仅连接系统中已配对的兼容打印机。</p>`);}
+function openDevice(){const d=native.device||{};openSheet('device','你的打印机',`<div class="info-row"><span>设备</span><strong>米家桌面照片机 2</strong></div><div class="info-row"><span>连接</span><strong>${d.connected?'蓝牙直连 · 已读取状态':'尚未读取状态'}</strong></div><div class="info-row"><span>检测到的相纸</span><strong>${detectedPaper()?PAPER[detectedPaper()][0]:'待识别'}</strong></div><div class="info-row"><span>色带余量</span><strong>${d.ribbon>=0?d.ribbon+' 张':'等待设备提供有效读数'}</strong></div>${d.alert&&d.alert!=='::0'?`<p class="hint">设备告警：${esc(d.alert)}</p>`:''}<button class="full-button" id="connectNow">${icon('printer')} 连接并刷新状态</button><button class="full-button secondary-button" id="changePaper">相纸与拼接</button>${!native.device?.released?'<button class="full-button secondary-button" id="releaseBluetooth">释放蓝牙给其他设备</button>':''}${detectedPaper()===5012?'<button class="full-button secondary-button" id="airprintLayout">AirPrint：'+(native.airprintSplice?'两张四寸拼接':'整张六寸')+'</button>':''}<button class="full-button secondary-button" id="systemBluetooth">打开系统蓝牙设置</button><p class="hint">请保持打印机开机，并关闭米家的打印机页面。仅连接系统中已配对的兼容打印机。</p>`);}
 async function historyPreview(job){
  const src='/private/'+job.file,image=new Image();image.src=src;await image.decode();
  const landscape=job.orientation==='landscape',canvas=document.createElement('canvas');
@@ -254,7 +254,7 @@ $('sheetBody').addEventListener('click',async e=>{
   state.mode='photo';selectPhoto(state.active);closeSheet();schedule();
  }
  else if(b.id==='connectNow'){bridge('connect');closeSheet();poll();}
- else if(b.id==='changePaper')openPaper();else if(b.id==='systemBluetooth')bridge('bluetoothSettings');
+ else if(b.id==='releaseBluetooth'){bridge('release');closeSheet();}else if(b.id==='airprintLayout'){bridge('airprintLayout',!native.airprintSplice);closeSheet();}else if(b.id==='changePaper')openPaper();else if(b.id==='systemBluetooth')bridge('bluetoothSettings');
  else if(b.id==='confirmSend'){
   poll();if(!pendingPrint||!detectedPaper()||pendingPrint.pages.some(p=>(p.media===5014?5012:p.media)!==detectedPaper())){toast('请先识别相纸，再重新预览');return;}b.disabled=true;const p=pendingPrint;let result;
   try{result=JSON.parse(await bridge('printBatch',JSON.stringify(p.pages.map(({preview,...page})=>page)))||'{}');}catch(err){result={error:'打印请求未确认，请检查任务'};}

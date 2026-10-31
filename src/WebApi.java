@@ -40,6 +40,8 @@ final class WebApi implements LocalHttp.Handler {
    }
    if(r.path.equals("/api/cancel")){PrintJobs.cancel(context,s.id);return json(200,new JSONObject().put("ok",true));}
    if(r.path.equals("/api/connect")){SharingService.checkPrinter();return json(200,new JSONObject().put("ok",true));}
+   if(r.path.equals("/api/release")){PrinterStatus.release(context);return json(200,new JSONObject().put("ok",true));}
+   if(r.path.equals("/api/airprint-layout")){PrinterStatus.layout(data.getBoolean("splice"));return json(200,new JSONObject().put("ok",true));}
    if(r.path.equals("/api/reconcile")){SharingService.reconcile(s.id);return json(200,new JSONObject().put("ok",true));}
    if(r.path.equals("/api/cutout")){
     String src=data.getString("source");synchronized(s){if(!s.files.contains(src))throw new IOException("照片不存在");}
