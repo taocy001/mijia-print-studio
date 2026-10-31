@@ -1,11 +1,13 @@
 """Bounded document conversion; no device access."""
-import sys,json,resource,base64,io
+import sys,json,base64,io
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from airprint import offline
 from airprint.documents import prepare_document,pdf_page_images
 from PIL import Image
-resource.setrlimit(resource.RLIMIT_CPU,(20,20))
+if sys.platform!='win32':
+    import resource
+    resource.setrlimit(resource.RLIMIT_CPU,(20,20))
 args=json.loads(sys.stdin.buffer.readline(4096))
 data=sys.stdin.buffer.read(32*1024*1024+1)
 if len(data)>32*1024*1024:raise ValueError('document too large')

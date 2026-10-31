@@ -1,0 +1,4 @@
+-r ../web/requirements.txt
+pypdfium2==5.14.0
+zeroconf==0.151.5
+pi-heif==1.4.0

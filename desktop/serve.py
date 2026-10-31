@@ -1,5 +1,5 @@
 """Run independent Web and AirPrint adapters on one print service."""
-import argparse,asyncio,os,re,signal,sys
+import argparse,asyncio,logging,os,re,signal,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from aiohttp import web
@@ -7,7 +7,7 @@ from printing.service import PrintService
 
 async def run(args):
     core=PrintService(args.data,args.simulate,os.environ.get('MIJIA_BLUETOOTH_ADDRESS'))
-    runners=[];bonjour=None
+    runners=[];bonjour=None;signals=[]
     await core.start(None)
     try:
         if args.entry in ('web','both'):
@@ -25,17 +25,28 @@ async def run(args):
             await runner.setup();await web.TCPSite(runner,'0.0.0.0' if args.lan else '127.0.0.1',args.ipp_port).start()
             print(f'AirPrint: {adapter.uri}',flush=True)
             if args.announce:
-                from desktop.bonjour import Bonjour
-                bonjour=asyncio.create_task(Bonjour(adapter,args.printer_name,args.ipp_port).run())
+                if sys.platform=='win32':
+                    from desktop.windows_bonjour import WindowsBonjour
+                    publisher=WindowsBonjour(adapter,args.printer_name,args.ipp_port,args.address)
+                else:
+                    from desktop.bonjour import Bonjour
+                    publisher=Bonjour(adapter,args.printer_name,args.ipp_port)
+                bonjour=asyncio.create_task(publisher.run())
         if args.simulate:print('模拟模式：不会连接打印机或实际打印。',flush=True)
         stopped=asyncio.Event();loop=asyncio.get_running_loop()
-        for sig in (signal.SIGINT,signal.SIGTERM):loop.add_signal_handler(sig,stopped.set)
+        for sig in (signal.SIGINT,signal.SIGTERM,*([signal.SIGBREAK] if sys.platform=='win32' else [])):
+            if sys.platform=='win32':
+                signals.append((sig,signal.getsignal(sig)))
+                signal.signal(sig,lambda *_:loop.call_soon_threadsafe(stopped.set))
+            else:loop.add_signal_handler(sig,stopped.set)
         await stopped.wait()
     finally:
+        for sig,previous in signals:signal.signal(sig,previous)
         if bonjour:
             bonjour.cancel()
             try:await bonjour
             except asyncio.CancelledError:pass
+            except Exception:logging.getLogger(__name__).warning('AirPrint discovery shutdown failed; continuing cleanup')
         for runner in reversed(runners):await runner.cleanup()
         await core.stop(None)
 

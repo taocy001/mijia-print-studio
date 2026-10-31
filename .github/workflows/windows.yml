@@ -1,0 +1,23 @@
+name: Windows service
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  offline:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r desktop/requirements-windows.txt
+      - name: Offline service and transport checks
+        run: >-
+          python -c "import subprocess,sys; [subprocess.check_call([sys.executable,'-m','unittest','discover','-s','tests','-p',pattern]) for pattern in ['test_windows*.py','test_desktop*.py','test_airprint_integration.py','test_queue_recovery.py']]"
