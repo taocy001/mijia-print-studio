@@ -37,7 +37,7 @@ public final class SharingService extends PrintService {
  static void resumeQueue(){SharingService s=instance;if(s!=null)s.main.post(()->{if(!Store.busy){JSONObject j=Store.read(s,"job.json");if(!j.has("token")||Store.terminal(j))s.paused=false;}});}
  static void checkPrinter(){SharingService s=instance;if(s==null)return;s.main.post(()->{
   synchronized(Store.LOCK){JSONObject j=Store.read(s,"job.json");if(Store.busy||j.has("token")&&!Store.terminal(j))return;Store.busy=true;}
-  new Thread(()->{try(Printer p=new Printer(s)){Store.device=p.status();Store.message="蓝牙已连接";}catch(Exception e){Store.message="连接失败，请在手机上检查打印机";}finally{Store.busy=false;}},"liuying-web-status").start();
+  new Thread(()->{try(Printer p=new Printer(s)){Store.device=p.status();Store.message="蓝牙已连接";}catch(Exception e){Store.device=new JSONObject();Store.message="连接失败，请在手机上检查打印机";}finally{Store.busy=false;}},"liuying-web-status").start();
  });}
  static void reconcile(String owner)throws Exception{SharingService s=instance;if(s==null)throw new java.io.IOException("共享服务未开启");s.main.post(()->{synchronized(Store.LOCK){JSONObject j=Store.read(s,"job.json");if(!Store.busy&&!s.running&&owner.equals(j.optString("owner"))&&j.has("jobId")&&!Store.terminal(j)){s.running=true;s.execute("reconcile");}}});}
  static void stopSharing(){SharingService s=instance;if(s!=null)s.main.post(s::closeSharing);}

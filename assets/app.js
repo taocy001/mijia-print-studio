@@ -18,7 +18,7 @@ const PAPER={5009:['3 寸方形背胶纸','方形照片 · 背胶相纸','3 寸�
 const defaults={mode:'photo',media:5012,orientation:'auto',fit:'cover',border:0,gap:16,filter:'none',caption:'',month:new Date().toISOString().slice(0,7),label:'名字，留在喜欢的东西上',subtitle:'THIS BELONGS TO ME',idSize:'35x45',photos:[],active:0};
 let state={...defaults},native={},images=new Map(),peek=false,sheetKind='',toastTimer,renderQueued=false,lastJobPhase='',pendingPrint=null;
 try{const old=JSON.parse(localStorage.getItem(window.STUDIO_DRAFT_KEY||'liuying-draft')||'null');if(old)state={...defaults,...old};}catch(e){}
-if(!MODES.some(m=>m[0]===state.mode))state.mode='photo';if(!PAPER[state.media])state.media=5012;
+if(!MODES.some(m=>m[0]===state.mode))state.mode='photo';if(!PAPER[state.media])state.media=5012;if(state.sixLayout===undefined)state.sixLayout=state.media===5014?5014:5012;
 state.photos=(state.photos||[]).filter(p=>p.src==='/sample.svg'||/^\/private\/(photos|prints)\/[a-zA-Z0-9-]+\.jpg$/.test(p.src)).slice(0,6);
 state.active=Math.min(Math.max(0,state.active||0),Math.max(0,state.photos.length-1));
 for(const p of state.photos){
@@ -154,6 +154,11 @@ function render(){
  updateStatus();
 }
 function updateStatus(){
+ const tray=detectedPaper();
+ if(!tray){$('paperBtn').innerHTML='识别相纸'+icon('chevron');$('paperBtn').setAttribute('aria-label','识别相纸');$('paperInfo').textContent='相纸待识别';$('paperTag').textContent='待识别';}
+ else{$('paperBtn').innerHTML=esc(PAPER[state.media][2])+icon('chevron');$('paperBtn').setAttribute('aria-label',PAPER[state.media][0]);}
+ const send=$('confirmSend');if(send)send.disabled=!tray||!pendingPrint||pendingPrint.pages.some(p=>(p.media===5014?5012:p.media)!==tray);
+
  $('printBtn').disabled=!ready()||native.busy||native.unresolved;
  $('dockTitle').textContent=ready()?'一张，刚刚好。':'准备好你的第一张';
  $('dockMeta').textContent=`${PAPER[state.media][0]} · ${state.mode==='collage'?Math.min(6,state.photos.length)+' 张拼成 1 张':state.media===5014?'上下两幅 · 1 张':'单张打印'}`;
@@ -163,7 +168,12 @@ function updateStatus(){
  if(j.token){$('jobLabel').textContent=j.message||native.message;$('jobProgress').style.width=(j.progress||0)+'%';$('jobAction').textContent=native.unresolved?'检查任务':'详情';}
  if(j.phase==='done'&&lastJobPhase&&lastJobPhase!=='done')toast('打印完成，去取你的照片吧。');lastJobPhase=j.phase;
 }
-function poll(){try{native=JSON.parse(bridge('state')||'{}');updateStatus();}catch(e){}}
+function detectedPaper(){const d=native.device||{};return d.connected&&[5009,5012].includes(+d.media)?+d.media:0;}
+function syncPaper(){
+ const tray=detectedPaper(),media=tray===5009?5009:tray===5012?(state.sixLayout===5014?5014:5012):state.media;
+ if(media!==state.media){state.media=media;if(media===5014&&state.mode==='collage')state.mode='photo';if(pendingPrint){closeSheet();toast('相纸已变化，请重新预览');}schedule();}
+}
+function poll(){try{const previous=detectedPaper();native=JSON.parse(bridge('state')||'{}');syncPaper();if(previous!==detectedPaper()&&sheetKind==='paper')openPaper();updateStatus();}catch(e){}}
 function openSheet(kind,title,html){const samePanel=sheetKind===kind&&!$('sheet').hidden;$('sheet').setAttribute('aria-modal','true');document.body.classList.remove('layer-editing');$('sheet').classList.remove('layer-sheet','emoji-sheet');sheetKind=kind;$('sheetTitle').textContent=title;$('sheetBody').innerHTML=html;$('sheet').hidden=false;$('scrim').hidden=false;document.body.style.overflow='hidden';icons($('sheet'));$('sheet').scrollTop=0;$('sheetBody').scrollTop=0;$('sheetBody').querySelectorAll('[data-close]').forEach(b=>b.remove());if(window.Drawer)Drawer.open(kind,samePanel);}
 function closeSheet(){if(window.Drawer)Drawer.reset();document.body.classList.remove('layer-editing');$('sheet').classList.remove('layer-sheet','emoji-sheet');sheetKind='';$('sheet').hidden=true;$('scrim').hidden=true;document.body.style.overflow='';pendingPrint=null;}
 window.goBack=()=>{if(sheetKind){closeSheet();return true;}if(window.LayerEditor&&LayerEditor.selected()){LayerEditor.select(null);return true;}return false;};
@@ -184,8 +194,12 @@ function openFilters(){const source=images.get(active()?.src)||images.get('/samp
 
 function openLegacyText(){let html=['label','card'].includes(state.mode)?`<div class="field"><label>姓名或主标题</label><input id="labelInput" type="text" maxlength="30" value="${esc(state.mode==='label'?state.labelTitle:state.cardTitle)}" placeholder="写下名字"></div><div class="field"><label>第二行小字</label><input id="subtitleInput" type="text" maxlength="50" value="${esc(state.mode==='label'?state.labelSubtitle:state.cardSubtitle)}"></div>`:`<div class="field"><label>想留在照片上的话 <span>最多 40 字</span></label><input id="captionInput" type="text" maxlength="40" value="${esc(active()?.caption??state.caption)}" placeholder="比如：和你在一起的每一天"></div><p class="hint">${['calendar','id'].includes(state.mode)?'月历和证件照采用固定版式，不叠加文字。':'文字会显示在照片底部，留空即可隐藏。'}</p>`;
  openSheet('text','不止一张照片',html+'<button class="full-button" data-close>完成</button>');}
-function openPaper(){openSheet('paper','相纸类型',Object.entries(PAPER).map(([key,p])=>`<button class="paper-option ${state.media==key?'active':''}" data-paper="${key}"><span class="paper-shape ${key==='5009'?'square':key==='5014'?'split':''}"></span><span><strong>${p[0]}</strong><small>${p[1]}</small></span><span class="check">${state.media==key?icon('check'):''}</span></button>`).join('')+'<p class="hint">普通 6 寸与 4 寸拼接共用同类纸盒，无法自动区分。请选择实际装入的相纸，避免尺寸不匹配。</p>');}
-function openDevice(){const d=native.device||{};openSheet('device','你的打印机',`<div class="info-row"><span>设备</span><strong>米家桌面照片机 2</strong></div><div class="info-row"><span>连接</span><strong>${d.connected?'蓝牙直连 · 已读取状态':'尚未读取状态'}</strong></div><div class="info-row"><span>当前选择相纸</span><strong>${PAPER[state.media][0]}</strong></div><div class="info-row"><span>色带余量</span><strong>${d.ribbon>=0?d.ribbon+' 张':'等待设备提供有效读数'}</strong></div>${d.alert&&d.alert!=='::0'?`<p class="hint">设备告警：${esc(d.alert)}</p>`:''}<button class="full-button" id="connectNow">${icon('printer')} 连接并刷新状态</button><button class="full-button secondary-button" id="changePaper">更换相纸类型</button><button class="full-button secondary-button" id="systemBluetooth">打开系统蓝牙设置</button><p class="hint">请保持打印机开机，并关闭米家的打印机页面。仅连接系统中已配对的兼容打印机。</p>`);}
+function openPaper(){
+ const tray=detectedPaper();
+ const html=tray===5012?[5012,5014].map(key=>`<button class="paper-option ${state.media===key?'active':''}" data-paper="${key}"><span class="paper-shape ${key===5014?'split':''}"></span><span><strong>${key===5012?'整张 6 寸':'两张 4 寸拼接'}</strong></span><span class="check">${state.media===key?icon('check'):''}</span></button>`).join(''):`<p class="hint">${tray===5009?'已检测到 3 寸方形背胶纸':'尚未识别相纸，请连接打印机读取纸盒'}</p>`;
+ openSheet('paper',tray?'已检测 · '+PAPER[tray][0]:'识别相纸',html+'<button class="full-button secondary-button" id="connectNow">重新检测</button>');
+}
+function openDevice(){const d=native.device||{};openSheet('device','你的打印机',`<div class="info-row"><span>设备</span><strong>米家桌面照片机 2</strong></div><div class="info-row"><span>连接</span><strong>${d.connected?'蓝牙直连 · 已读取状态':'尚未读取状态'}</strong></div><div class="info-row"><span>检测到的相纸</span><strong>${detectedPaper()?PAPER[detectedPaper()][0]:'待识别'}</strong></div><div class="info-row"><span>色带余量</span><strong>${d.ribbon>=0?d.ribbon+' 张':'等待设备提供有效读数'}</strong></div>${d.alert&&d.alert!=='::0'?`<p class="hint">设备告警：${esc(d.alert)}</p>`:''}<button class="full-button" id="connectNow">${icon('printer')} 连接并刷新状态</button><button class="full-button secondary-button" id="changePaper">相纸与拼接</button><button class="full-button secondary-button" id="systemBluetooth">打开系统蓝牙设置</button><p class="hint">请保持打印机开机，并关闭米家的打印机页面。仅连接系统中已配对的兼容打印机。</p>`);}
 async function historyPreview(job){
  const src='/private/'+job.file,image=new Image();image.src=src;await image.decode();
  const landscape=job.orientation==='landscape',canvas=document.createElement('canvas');
@@ -230,7 +244,7 @@ $('sheetBody').addEventListener('click',async e=>{
  else if(b.hasAttribute('data-close'))closeSheet();
  else if(b.dataset.setting){changeSetting(b.dataset.setting,b.dataset.value);openLayout();}
  else if(b.dataset.filter){changeSetting('filter',b.dataset.filter);openFilters();}
- else if(b.dataset.paper){state.media=+b.dataset.paper;if(state.media===5014&&state.mode==='collage'){state.mode='photo';toast('拼接纸会将前两张照片分别排在上下两幅');}schedule();closeSheet();}
+ else if(b.dataset.paper){if(detectedPaper()!==5012||![5012,5014].includes(+b.dataset.paper))return;state.sixLayout=state.media=+b.dataset.paper;if(state.media===5014&&state.mode==='collage'){state.mode='photo';toast('拼接纸会将前两张照片分别排在上下两幅');}schedule();closeSheet();}
  else if(b.dataset.history!==undefined){const j=native.history[+b.dataset.history];openSheet('historyDetail','这张，已经留住了',`<div class="confirmation-preview"><img data-history-image="0" src="/private/${esc(j.file)}" alt="打印记录"></div><p class="hint">${esc(j.message)} · ${PAPER[j.media]?.[0]||'相纸'}</p><button class="full-button" id="importHistory" data-src="/private/${esc(j.file)}" data-media="${j.media}" data-orientation="${j.orientation}">作为新照片继续创作</button>`);fillHistoryPreviews([j]);}
  else if(b.id==='importHistory'){
   if(state.photos.length>=6){toast('最多 6 张照片，请先移除一张');return;}
@@ -242,7 +256,7 @@ $('sheetBody').addEventListener('click',async e=>{
  else if(b.id==='connectNow'){bridge('connect');closeSheet();poll();}
  else if(b.id==='changePaper')openPaper();else if(b.id==='systemBluetooth')bridge('bluetoothSettings');
  else if(b.id==='confirmSend'){
-  if(!pendingPrint)return;b.disabled=true;const p=pendingPrint;let result;
+  poll();if(!pendingPrint||!detectedPaper()||pendingPrint.pages.some(p=>(p.media===5014?5012:p.media)!==detectedPaper())){toast('请先识别相纸，再重新预览');return;}b.disabled=true;const p=pendingPrint;let result;
   try{result=JSON.parse(await bridge('printBatch',JSON.stringify(p.pages.map(({preview,...page})=>page)))||'{}');}catch(err){result={error:'打印请求未确认，请检查任务'};}
   if(result.ok){closeSheet();poll();toast(result.simulated?'模拟任务已接收，不会实际打印':window.BrowserTransport?'已加入打印队列':'正在连接打印机，准备传送照片');}else{b.disabled=false;toast(result.error||'无法提交打印');}
  }else if(b.id==='reconcileJob'){bridge('reconcile');closeSheet();}

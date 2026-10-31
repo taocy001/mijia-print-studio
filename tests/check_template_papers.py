@@ -42,7 +42,7 @@ with sync_playwright() as p:
  assert page.evaluate('state.photos.map(p=>p.templateId)')==[None,'studio-petal',None]
  frames=page.evaluate('photoFrames.map(f=>[f.x,f.y,f.w,f.h])');assert frames[0]==[0,0,1216,912] and frames[1][1]>912,frames
  # Paper changes preserve each photo's choice.
- page.evaluate('openPaper()');page.locator('[data-paper="5009"]').click();page.evaluate('selectPhoto(1);render()');assert page.evaluate('state.mode')=='template'
+ page.evaluate('native.device={connected:true,media:5009};syncPaper();');page.evaluate('selectPhoto(1);render()');assert page.evaluate('state.mode')=='template'
  assert page.evaluate('TemplateStudio.entry().width===1040&&TemplateStudio.entry().height===1040')
  page.screenshot(path='/tmp/liuying-square-template.png')
  assert not errors,errors
