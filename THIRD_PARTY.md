@@ -26,3 +26,11 @@
 | pypdf | [BSD-3-Clause](https://github.com/py-pdf/pypdf) |
 
 系统 IOBluetooth、CoreGraphics/CUPS 不随仓库分发。测试人像是NASA公共领域图片，来源见 `tests/fixtures/faces/SOURCES.txt`，不作为App素材打包；其他打印测试夹具由代码生成。
+
+Windows额外依赖仅通过 `desktop/requirements-windows.txt` 安装，不复制进Android或Mac运行环境：
+
+| 依赖 | 许可与来源 |
+| --- | --- |
+| pypdfium2 5.14.0 | [Apache-2.0 OR BSD-3-Clause](https://pypdfium2.readthedocs.io/en/stable/readme.html)；PDFium及捆绑组件另有许可，保留wheel完整licenses目录 |
+| zeroconf 0.151.5 | [LGPL-2.1-or-later](https://github.com/python-zeroconf/python-zeroconf)，间接依赖ifaddr为MIT |
+| pi-heif 1.4.0 | [BSD-3-Clause及捆绑组件许可](https://github.com/bigcat88/pillow_heif)；HEIF解码库保留wheel附带许可 |

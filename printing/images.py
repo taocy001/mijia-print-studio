@@ -9,11 +9,18 @@ def decode(data):
     try:
         image=Image.open(io.BytesIO(data));image.load()
     except Exception:
-        if sys.platform!='darwin' or len(data)<12 or data[4:8]!=b'ftyp':raise UserError('无法读取照片') from None
-        with tempfile.TemporaryDirectory(prefix='liuying-image-') as folder:
-            src=Path(folder)/'input.heic';dst=Path(folder)/'output.png';src.write_bytes(data)
-            subprocess.run(['/usr/bin/sips','-s','format','png',str(src),'--out',str(dst)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
-            image=Image.open(dst);image.load()
+        if len(data)<12 or data[4:8]!=b'ftyp':raise UserError('无法读取照片') from None
+        if sys.platform=='win32':
+            try:
+                from pi_heif import register_heif_opener
+                register_heif_opener();image=Image.open(io.BytesIO(data));image.load()
+            except Exception:raise UserError('无法解码 HEIC，请检查 Windows 依赖或改用 JPEG') from None
+        elif sys.platform=='darwin':
+            with tempfile.TemporaryDirectory(prefix='liuying-image-') as folder:
+                src=Path(folder)/'input.heic';dst=Path(folder)/'output.png';src.write_bytes(data)
+                subprocess.run(['/usr/bin/sips','-s','format','png',str(src),'--out',str(dst)],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=30)
+                image=Image.open(dst);image.load()
+        else:raise UserError('无法读取照片') from None
     image=ImageOps.exif_transpose(image).convert('RGB');image.thumbnail((2400,2400));return image
 
 def page_files(page):

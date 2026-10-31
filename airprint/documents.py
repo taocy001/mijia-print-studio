@@ -1,5 +1,6 @@
 """Offline document conversion. Loading this renderer never opens USB/network."""
 import ctypes as c
+import sys
 from io import BytesIO
 from pathlib import Path
 from PIL import Image
@@ -39,6 +40,9 @@ def _native_render(lib, data, native_mime):
 
 def pdf_page_images(data, max_pages=2):
     """拆分多页 PDF (iOS 多选照片打印 = 每页一张照片), 每页经原生渲染器转为 PIL 图."""
+    if sys.platform=='win32':
+        from .windows_documents import pdf_page_images as windows_pdf_pages
+        return windows_pdf_pages(data,max_pages)
     from pypdf import PdfReader, PdfWriter
     lib = _render_lib()
     imgs = []
@@ -63,6 +67,10 @@ def prepare_document(data, mime, *, scaling="fill", rotate_180=False, centering=
         return prepare_jpeg(data, scaling=scaling, rotate_180=rotate_180, centering=centering, orientation=orientation)
     if mime not in FORMATS:
         raise Unsupported("unsupported document format")
+    if sys.platform=='win32':
+        from .windows_documents import pdf_page_images as windows_pdf_pages,raster_image
+        image=windows_pdf_pages(data,1)[0] if mime=='application/pdf' else raster_image(data,mime)
+        return prepare_rgb(image.tobytes(),image.width,image.height,scaling='fit' if mime=='application/pdf' else scaling,rotate_180=rotate_180,centering=centering,orientation=orientation,face_aware=False)
     lib = _render_lib()
     photo = mime == 'application/pdf' and scaling == 'fill' and _pdf_is_photo(lib, data)
     native_mime = 'application/x-mijia-photo-pdf' if photo else mime

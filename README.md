@@ -8,12 +8,12 @@ flowchart LR
     B[浏览器 · 共用编辑器] --> W{共享服务所在设备}
     C[系统 AirPrint] --> W
     W --> P
-    W --> M[Mac 打印队列]
+    W --> M[Mac / Windows 打印队列]
     P --> D[蓝牙打印机]
     M --> D
 ```
 
-手机和 Mac 可独立运行，每台设备串行打印、按需连接蓝牙；不同设备需轮流使用打印机。
+手机、Mac 和 Windows 可独立运行，每台设备串行打印、按需连接蓝牙；不同设备需轮流使用打印机。
 
 ## 功能
 
@@ -72,17 +72,46 @@ build/venv/bin/python desktop/serve.py --simulate
 
 抠图和人脸检测模型通过 `python3 fetch_deps.py` 下载，推理离线执行。HEIC 使用 macOS 系统转换。
 
+## Windows
+
+使用 Windows 10/11、Python 3.12 64位和支持经典蓝牙的适配器。服务运行于原生Windows，不能在WSL中直接连接打印机；无需安装Mac工具或Android SDK。
+
+在PowerShell进入仓库目录：
+
+```powershell
+py -3.12 -m venv build/venv
+.\build\venv\Scripts\python.exe -m pip install -r desktop/requirements-windows.txt
+.\build\venv\Scripts\python.exe desktop/windows.py --simulate
+```
+
+本机打开 `http://127.0.0.1:8635`，输入终端配对码。模拟模式只验证流程，不连接打印机。
+
+真实使用先在Windows设置中配对打印机，再设置地址并启动：
+
+```powershell
+$env:MIJIA_BLUETOOTH_ADDRESS = '打印机蓝牙地址'
+.\build\venv\Scripts\python.exe desktop/windows.py --lan --announce --address 192.168.1.20 --allow-network 192.168.1.0/24
+```
+
+示例IP和网段需替换为这台电脑的局域网IPv4和可信网段。其他设备访问 `http://电脑IP:8635`，或在系统打印菜单选择此电脑共享的打印机。`--entry web` / `--entry airprint` 可分别启动；六寸拼接设置与Mac相同。
+
+Windows防火墙需允许所用Python在专用网络接收TCP 8635/8636及UDP 5353；只在可信局域网开放。保持电脑唤醒和服务进程运行，Ctrl+C停止。数据默认在 `%LOCALAPPDATA%\MijiaPrintStudio`，可用 `--data` 指定其他目录。
+
+PDF使用PDFium完整保留整页；HEIC使用本地解码库。需要人脸检测/抠图时先运行 `python fetch_deps.py` 下载离线模型。安装的依赖保留其附带许可证；不需要安装Bonjour软件。
+
+Windows提供离线自动化测试；蓝牙适配器兼容性和最终实物打印仍需Windows真机验收。
+
 ## 共享与输出限制
 
 Web 使用配对码和会话隔离；AirPrint 无账号认证，仅在可信局域网使用，不映射公网。Web 使用 HTTP。两入口可分别关闭，已经开始的打印不会因关闭入口重发。
 
 AirPrint 支持 JPEG、PDF、单页 URF/PWG；PDF 最多六页，拼接只支持 JPEG/PDF，每两页一张纸，奇数末页重复。每任务一份，不支持的格式或参数明确拒绝。只有打印机状态和纸型可用时广播，客户端发现缓存可能延迟更新。
 
-Mac 可提取照片型 PDF；Android PDF 完整保留整页。两端图像编码不同，不承诺逐像素相同。导入图像最长边 2400，极端放大可能损失细节。
+Mac 可提取照片型 PDF；Android / Windows PDF 完整保留整页。两端图像编码不同，不承诺逐像素相同。导入图像最长边 2400，极端放大可能损失细节。
 
 ## 开发与测试
 
-`assets/` 是唯一编辑器与合成代码；`src/` 为 Android 适配；`printing/` 为 Mac 公共队列；Web 与 AirPrint 入口不互相依赖。接口见 [web/CONTRACT.md](web/CONTRACT.md)。
+`assets/` 是唯一编辑器与合成代码；`src/` 为 Android 适配；`printing/` 为桌面公共队列；Web 与 AirPrint 入口不互相依赖。接口见 [web/CONTRACT.md](web/CONTRACT.md)。
 
 ```sh
 build/venv/bin/pip install -r requirements-test.txt

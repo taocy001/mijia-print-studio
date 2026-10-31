@@ -1,7 +1,8 @@
 """Shared durable queue and exclusive desktop printer ownership."""
-import asyncio,fcntl,hashlib,json,logging,os,re,tempfile,threading,time,uuid
+import asyncio,hashlib,json,logging,os,re,tempfile,threading,time,uuid,sys
 from pathlib import Path
 from .images import page_files,UserError
+from .platform import open_lock,lock_exclusive,user_id
 ROOT=Path(__file__).resolve().parents[1]
 _log=logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ class PrintService:
         self._acquire(self.data/'service.lock')
         if not simulate:
             identity=hashlib.sha256(re.sub('[^0-9a-f]','',str(address).lower()).encode()).hexdigest()[:24]
-            self._acquire(Path(tempfile.gettempdir())/f'liuying-service-{os.getuid()}-{identity}.lock')
+            self._acquire(Path(tempfile.gettempdir())/f'liuying-service-{user_id()}-{identity}.lock')
         try:self.jobs=json.loads((self.data/'jobs.json').read_text())
         except FileNotFoundError:self.jobs=[]
         for job in self.jobs:
@@ -34,8 +35,8 @@ class PrintService:
                 else:job.update(phase='uncertain',message='上次结果未知，请在服务端检查');self.paused=True
         self.save()
     def _acquire(self,path):
-        handle=open(path,'a+')
-        try:fcntl.flock(handle,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        handle=open_lock(path)
+        try:lock_exclusive(handle)
         except BlockingIOError:
             handle.close()
             for held in self._locks:held.close()
@@ -45,7 +46,8 @@ class PrintService:
         with self._save_lock:atomic(self.data/'jobs.json',json.loads(json.dumps(self.jobs)))
     def printer(self,status=False):
         from .bluetooth_printer import BluetoothPrinter
-        return BluetoothPrinter(self.address,ROOT/'build/desktop-bluetooth.app/Contents/MacOS/transport',os.environ.get('MIJIA_RFCOMM_CHANNEL','1'),self.data/'bluetooth-state',status_only=status)
+        helper=ROOT/'printing/windows_transport.py' if sys.platform=='win32' else ROOT/'build/desktop-bluetooth.app/Contents/MacOS/transport'
+        return BluetoothPrinter(self.address,helper,os.environ.get('MIJIA_RFCOMM_CHANNEL','1'),self.data/'bluetooth-state',status_only=status)
     def connection(self,status=False):
         if self.device_printer is None:self.device_printer=self.printer(status)
         return self.device_printer

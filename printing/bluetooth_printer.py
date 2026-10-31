@@ -8,6 +8,7 @@ import struct
 import zlib
 from PIL import Image
 from .bluetooth_client import BluetoothClient
+from .platform import sync_directory
 
 
 def terminal_info(info):
@@ -58,11 +59,7 @@ class BluetoothPrinter:
             json.dump(record, f)
             f.flush()
             os.fsync(f.fileno())
-        fd = os.open(self.intent.parent, os.O_RDONLY)
-        try:
-            os.fsync(fd)
-        finally:
-            os.close(fd)
+        sync_directory(self.intent.parent)
 
     def print_photo(self, files, copies=1, sharpen=0, media_size=5012,
                     log=print, on_lower_quality=None, on_cancel=None, on_state=None):

@@ -1,8 +1,9 @@
-"""Mac RFCOMM + independently verified Syrup protocol. No automatic print retries."""
-import fcntl, hashlib, json, logging, os, queue, re, secrets, struct, subprocess, tempfile, threading, time
+"""Desktop RFCOMM and Syrup protocol. No automatic print retries."""
+import hashlib, json, logging, os, queue, re, secrets, struct, subprocess, tempfile, threading, time
 from pathlib import Path
 from Crypto.Cipher import AES
 from PIL import Image
+from .platform import open_lock, lock_exclusive, user_id, transport_command
 
 def frame(ch,op,enc,seq,body,total=0,number=0):
     if len(body) > 1023: raise ValueError('Bluetooth frame too large')
@@ -31,12 +32,12 @@ class BluetoothClient:
     def open(self, *, lock_timeout=0, attempts=2):
         try:
             digest = hashlib.sha256(self.address.encode()).hexdigest()[:24]
-            path = Path(tempfile.gettempdir()) / f"mijia-bt-{os.getuid()}-{digest}.lock"
-            self.lock = os.fdopen(os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600), 'a')
+            path = Path(tempfile.gettempdir()) / f"mijia-bt-{user_id()}-{digest}.lock"
+            self.lock = open_lock(path)
             deadline = time.monotonic() + max(0, lock_timeout)
             while True:
                 try:
-                    fcntl.flock(self.lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    lock_exclusive(self.lock)
                     break
                 except BlockingIOError:
                     if time.monotonic() >= deadline:
@@ -66,7 +67,7 @@ class BluetoothClient:
         env = dict(os.environ, MIJIA_BLUETOOTH_ADDRESS=self.address)
         env.pop("MIJIA_RFCOMM_CHANNEL", None)
         if self.channel is not None: env["MIJIA_RFCOMM_CHANNEL"] = str(self.channel)
-        self.p=subprocess.Popen([self.helper],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,bufsize=1)
+        self.p=subprocess.Popen(transport_command(self.helper),env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,bufsize=1)
         self.lines=queue.Queue();self.buffer=bytearray();self.seq=4
         process, lines = self.p, self.lines
         def read():
