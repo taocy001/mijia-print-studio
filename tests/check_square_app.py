@@ -8,7 +8,7 @@ root=Path(__file__).resolve().parents[1];assets=root/'assets'
 with sync_playwright() as p:
  b=p.chromium.launch();page=b.new_page(viewport={'width':411,'height':828},is_mobile=True,has_touch=True);errors=[]
  page.on('pageerror',lambda e:errors.append(str(e)))
- page.add_init_script("window.Studio={state:()=>JSON.stringify({permission:true,device:{},history:[]}),printBatch:()=>{throw Error('Printing is forbidden in tests')}}")
+ page.add_init_script("window.Studio={state:()=>JSON.stringify({permission:true,device:{connected:true,media:5009},history:[]}),printBatch:()=>{throw Error('Printing is forbidden in tests')}}")
  def route(r):
   path=unquote(urlparse(r.request.url).path);file=assets/(path.lstrip('/') or 'index.html')
   if path.startswith('/private/'):
@@ -19,7 +19,8 @@ with sync_playwright() as p:
  page.evaluate("async()=>{await loadPhoto({src:'/sample.svg'});state={...defaults,photos:Array.from({length:3},()=>({src:'/sample.svg',width:1200,height:800,turn:0,zoom:1,x:0,y:0,fit:'cover',border:0,filter:'none',templateId:null,overlays:[]})),active:0};render();}")
 
  page.evaluate("state.media=5009;render();openPaper()")
- assert page.locator('[data-paper="5009"].active').count()==1
+ assert page.locator('[data-paper]').count()==0
+ assert '3 寸方形背胶纸' in page.locator('#sheetTitle').inner_text()
  assert page.evaluate("logicalSize()") == [1040,1040]
  page.evaluate("closeSheet()")
  result=page.evaluate("""async()=>{
