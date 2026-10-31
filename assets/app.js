@@ -17,7 +17,7 @@ const FILTERS=Tone.names.map(([id,name])=>[id,name,'none']);
 const PAPER={5009:['3 寸方形背胶纸','方形照片 · 背胶相纸','3 寸背胶'],5012:['6 寸相纸','102 × 152 mm','6 寸'],5014:['4 寸拼接相纸','整版上下两幅','4 寸拼接']};
 const defaults={mode:'photo',media:5012,orientation:'auto',fit:'cover',border:0,gap:16,filter:'none',caption:'',month:new Date().toISOString().slice(0,7),label:'名字，留在喜欢的东西上',subtitle:'THIS BELONGS TO ME',idSize:'35x45',photos:[],active:0};
 let state={...defaults},native={},images=new Map(),peek=false,sheetKind='',toastTimer,renderQueued=false,lastJobPhase='',pendingPrint=null;
-try{const old=JSON.parse(localStorage.getItem('liuying-draft')||'null');if(old)state={...defaults,...old};}catch(e){}
+try{const old=JSON.parse(localStorage.getItem(window.STUDIO_DRAFT_KEY||'liuying-draft')||'null');if(old)state={...defaults,...old};}catch(e){}
 if(!MODES.some(m=>m[0]===state.mode))state.mode='photo';if(!PAPER[state.media])state.media=5012;
 state.photos=(state.photos||[]).filter(p=>p.src==='/sample.svg'||/^\/private\/(photos|prints)\/[a-zA-Z0-9-]+\.jpg$/.test(p.src)).slice(0,6);
 state.active=Math.min(Math.max(0,state.active||0),Math.max(0,state.photos.length-1));
@@ -28,7 +28,7 @@ for(const p of state.photos){
  if(p.templateId===undefined)p.templateId=state.mode==='template'?state.templateId:null;
  if(p.overlays===undefined)p.overlays=JSON.parse(JSON.stringify(state.sceneLayers?.[state.mode+(state.media===5014?':split':'')]||[]));
 }
-function save(){try{localStorage.setItem('liuying-draft',JSON.stringify(state));}catch(e){}}
+function save(){try{localStorage.setItem(window.STUDIO_DRAFT_KEY||'liuying-draft',JSON.stringify(state));}catch(e){}}
 function toast(text){$('toast').textContent=text;$('toast').hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').hidden=true,3400);}
 function bridge(method,...args){if(window.Studio&&typeof Studio[method]==='function')return Studio[method](...args);if(method==='state')return '{}';toast('请在留影工坊 App 中使用此功能');}
 function active(){return state.photos[state.active];}
@@ -198,7 +198,7 @@ async function historyPreview(job){
 }
 function fillHistoryPreviews(list){list.forEach(async(job,i)=>{const el=$('sheetBody').querySelector('[data-history-image="'+i+'"]');try{const src=await historyPreview(job);if(el&&el.isConnected)el.src=src;}catch(e){}});}
 function openHistory(){const list=native.history||[];openSheet('history','留过的美好',list.length?`<div class="history-grid">${list.map((j,i)=>`<button class="history-card" data-history="${i}"><img data-history-image="${i}" src="/private/${esc(j.file)}" alt="历史作品"><strong>${esc(j.title||'照片')}</strong><small>${new Date(j.createdAt).toLocaleDateString('zh-CN')} · ${j.phase==='done'?'已完成':j.phase==='cancelled'?'已取消':'已中止'}</small></button>`).join('')}</div>`:'<div class="blank-state">这里会收好每一次打印。<br>先做一张喜欢的作品吧。</div>');fillHistoryPreviews(list);}
-function openJob(){const j=native.job||{};openSheet('job','打印进度',`<p style="line-height:1.9">${esc(j.message||'暂无任务')}</p><div class="info-row"><span>作品</span><strong>${esc(j.title||'照片')}</strong></div><div class="info-row"><span>任务编号</span><strong>${j.jobId||'尚未获得'}</strong></div><div class="info-row"><span>打印数量</span><strong>${j.batchCount||1} 个作品 · 每个 ${j.copies||1} 份</strong></div>${native.unresolved?`<button class="full-button" id="reconcileJob" ${native.busy?'disabled':''}>重新读取任务状态</button>${!j.jobId&&j.phase!=='prepared'?'<button class="full-button secondary-button" id="resolveUnknown">已检查打印机，结束本次记录</button>':''}<button class="full-button danger-button" id="cancelJob">${j.phase==='prepared'?'取消尚未提交的任务':'请求取消任务'}</button><p class="hint">中断后只检查原任务，不会自动重复提交照片。</p>`:'<button class="full-button" data-close>完成</button>'}`);}
+function openJob(){const j=native.job||{};if(j.phase==='queued'){openSheet('job','等待打印',`<p class="hint">${esc(j.message)}</p><button class="full-button danger-button" id="cancelJob">取消等待中的任务</button>`);return;}openSheet('job','打印进度',`<p style="line-height:1.9">${esc(j.message||'暂无任务')}</p><div class="info-row"><span>作品</span><strong>${esc(j.title||'照片')}</strong></div><div class="info-row"><span>任务编号</span><strong>${j.jobId||'尚未获得'}</strong></div><div class="info-row"><span>打印数量</span><strong>${j.batchCount||1} 个作品 · 每个 ${j.copies||1} 份</strong></div>${native.unresolved?`<button class="full-button" id="reconcileJob" ${native.busy?'disabled':''}>重新读取任务状态</button>${!j.jobId&&j.phase!=='prepared'?'<button class="full-button secondary-button" id="resolveUnknown">已检查打印机，结束本次记录</button>':''}<button class="full-button danger-button" id="cancelJob">${j.phase==='prepared'?'取消尚未提交的任务':'请求取消任务'}</button><p class="hint">中断后只检查原任务，不会自动重复提交照片。</p>`:'<button class="full-button" data-close>完成</button>'}`);}
 async function preparePrintPages(){
  const original=state.active,originalMode=state.mode,originalTemplate=state.templateId,wasPeek=peek,pages=[];
  const indices=['collage','idcard'].includes(state.mode)||['label','card'].includes(state.mode)||(state.mode==='calendar'&&(state.calendarLayout==='plain'||state.media===5014))?[original]:state.media===5014?state.photos.map((_,i)=>i).filter(i=>i%2===0):state.photos.map((_,i)=>i);
@@ -243,8 +243,8 @@ $('sheetBody').addEventListener('click',async e=>{
  else if(b.id==='changePaper')openPaper();else if(b.id==='systemBluetooth')bridge('bluetoothSettings');
  else if(b.id==='confirmSend'){
   if(!pendingPrint)return;b.disabled=true;const p=pendingPrint;let result;
-  try{result=JSON.parse(bridge('printBatch',JSON.stringify(p.pages.map(({preview,...page})=>page)))||'{}');}catch(err){result={error:'打印请求未确认，请检查任务'};}
-  if(result.ok){closeSheet();poll();toast('正在连接打印机，准备传送照片');}else{b.disabled=false;toast(result.error||'无法提交打印');}
+  try{result=JSON.parse(await bridge('printBatch',JSON.stringify(p.pages.map(({preview,...page})=>page)))||'{}');}catch(err){result={error:'打印请求未确认，请检查任务'};}
+  if(result.ok){closeSheet();poll();toast(result.simulated?'模拟任务已接收，不会实际打印':window.BrowserTransport?'已加入打印队列':'正在连接打印机，准备传送照片');}else{b.disabled=false;toast(result.error||'无法提交打印');}
  }else if(b.id==='reconcileJob'){bridge('reconcile');closeSheet();}
  else if(b.id==='resolveUnknown'){bridge('resolveUnknown');closeSheet();}else if(b.id==='cancelJob'){if(native.job?.phase==='prepared')bridge('discardPrepared');else bridge('cancel');closeSheet();}
 });

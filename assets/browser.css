@@ -1,0 +1,7 @@
+@media(min-width:1000px) and (pointer:fine){
+ .browser-client body.has-work .board{height:calc(100dvh - 116px - var(--browser-dock-height,62px));min-height:240px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+ .browser-client body.has-work .workspace{flex:none}
+ .browser-client body.has-work .app{min-height:calc(100dvh - var(--browser-dock-height,62px));margin-bottom:var(--browser-dock-height,62px)}
+ .browser-client #paperStage{flex:none}
+ .browser-client .photo-strip{justify-content:center}
+}
