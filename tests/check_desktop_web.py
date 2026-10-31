@@ -15,11 +15,13 @@ with tempfile.TemporaryDirectory(prefix='liuying-desktop-test-') as folder:
   with sync_playwright() as p:
    b=p.chromium.launch();ctx=b.new_context(bypass_csp=True,viewport={'width':1440,'height':900});page=ctx.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
    page.goto(url);page.locator('[name=code]').fill(code);page.get_by_role('button',name='连接',exact=True).click();page.wait_for_function('window.TemplateStudio&&window.BrowserTransport');page.evaluate('LayerEditor.ready')
+   sharing=ctx.request.get(url+'/api/sharing').json();assert sharing['current']==url and not sharing['lan'] and sharing['addresses']==[] and 'code' not in sharing
    photo=Image.new('RGB',(800,1200),'#dce8e6');draw=ImageDraw.Draw(photo);draw.ellipse((270,180,530,440),fill='#e4b98c');draw.rounded_rectangle((190,440,610,1050),70,fill='#356690');buf=io.BytesIO();photo.save(buf,'PNG')
    with page.expect_file_chooser() as choice:page.locator('#addFirst').click()
    choice.value.set_files({'name':'portrait.png','mimeType':'image/png','buffer':buf.getvalue()});page.wait_for_function('state.photos.length===1')
    src=page.evaluate('active().src');assert ctx.request.get(url+src).status==200
    other=b.new_context();assert other.request.get(url+src).status==401
+   assert other.request.get(url+'/api/sharing').status==401
    response=other.request.post(url+'/api/pair',form={'code':code},headers={'Origin':url});assert response.ok
    assert other.request.get(url+src).status==404
    assert ctx.request.post(url+'/api/cancel',data='{}',headers={'Origin':'http://evil.invalid'}).status==403

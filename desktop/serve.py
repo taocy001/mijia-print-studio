@@ -12,7 +12,7 @@ async def run(args):
     try:
         if args.entry in ('web','both'):
             from web.serve import Studio,app
-            studio=Studio(core=core);runner=web.AppRunner(app(studio),access_log=None);runners.append(runner)
+            studio=Studio(core=core,lan=args.lan,airprint=args.entry=='both');runner=web.AppRunner(app(studio),access_log=None);runners.append(runner)
             await runner.setup();await web.TCPSite(runner,'0.0.0.0' if args.lan else '127.0.0.1',args.web_port).start()
             print('配对码：'+studio.code,flush=True)
             print(f'Web: http://127.0.0.1:{args.web_port}',flush=True)

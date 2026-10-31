@@ -23,11 +23,14 @@ with sync_playwright() as p:
  assert page.locator('#stopAirPrint').count()==1
  assert page.locator('#resumeSharing').count()==1
  page.locator('#resumeSharing').click();assert page.evaluate('calls')==['resume']
+ assert page.evaluate("sheetKind==='sharing'&&!$('sheet').hidden")
+ page.evaluate('closeSheet()')
  page.evaluate('shared={running:false,airprint:false,paused:false}')
  page.locator('#menuBtn').click();page.locator('#sharingMenu').click()
  assert page.locator('#startAirPrint').count()==1
  assert page.locator('#startLocal').count()==0 and page.locator('#startLan').count()==1
  page.locator('#startAirPrint').click();assert page.evaluate('calls')==['resume','start']
+ assert page.evaluate("sheetKind==='sharing'&&!$('sheet').hidden")
  page.evaluate('native.device={connected:false,released:false};openDevice()')
  assert page.locator('#releaseBluetooth').count()==1
  page.locator('#releaseBluetooth').click();assert page.evaluate('calls')[-1]=='release'
