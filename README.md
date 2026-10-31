@@ -36,7 +36,7 @@ App 的「更多 → 共享打印」可开启本机访问或同一 Wi-Fi 共享�
 
 ## 电脑服务
 
-需要 Python 3.11+，真实蓝牙打印需要 macOS 与 Xcode Command Line Tools。
+需要 Python 3.12+，真实蓝牙打印需要 macOS 与 Xcode Command Line Tools。
 
 ```sh
 python3 -m venv build/venv
