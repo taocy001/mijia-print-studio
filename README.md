@@ -1,6 +1,9 @@
-# 留影工坊
+# mijia-print-studio · 留影工坊
 
-共用编辑器的 Android App 与浏览器打印页面。支持米家桌面照片打印机 2；非官方项目。
+Android App、Web 编辑器和 AirPrint 共用的蓝牙照片打印项目。支持米家桌面照片打印机 2；非官方项目。
+
+项目地址：https://github.com/taocy001/mijia-print-studio
+本项目只维护蓝牙后端，不提供 USB 打印。
 
 ## 构建
 
@@ -12,7 +15,7 @@ python3 fetch_deps.py
 python3 build.py
 ```
 
-输出 `build/liuying-studio.apk`。构建无需 Web 或 AirPrint 项目。依赖下载后可离线构建；App 的网络权限仅用于用户开启的本机与局域网共享服务。
+输出 `build/liuying-studio.apk`。构建无需 Web 或 AirPrint 项目。依赖下载后可离线构建；App 的网络权限仅用于用户开启的局域网共享服务。
 
 首次构建生成本地调试密钥；密钥与安装包不提交。已安装版本的覆盖更新需要沿用原签名密钥。
 
@@ -32,7 +35,7 @@ App 的「更多 → 共享打印」可开启同一 Wi-Fi 共享。
 需在解锁后的 App 前台开启，后台运行保留通知；系统强制停止或省电限制可能中断服务。
 
 `assets/` 是两端唯一编辑器源文件；Android 原生能力在 `src/`。接口与迁移边界见 `web/CONTRACT.md`。
-电脑服务入口为 `web/serve.py`，独立蓝牙后端与 Android 共用网页代码、素材和打印数据格式。旧 Web、AirPrint/AirDrop 源码与数据保留，可作为回退。
+电脑服务入口为 `web/serve.py`，独立蓝牙后端与 Android 共用网页代码、素材和打印数据格式。旧 Web、AirPrint 源码已退出主线，迁移时应单独备份旧数据。
 
 ## 电脑服务
 
@@ -64,12 +67,12 @@ Android 队列测试：先安装当前 App 并停止共享，运行 `python3 tes
 
 ## 发布仓库
 
-这是独立的发布候选仓库，不继承开发仓库历史。原创内容采用 MIT，第三方许可见 `THIRD_PARTY.md`。
+此仓库统一维护 Android、Web 和 AirPrint，使用审核后的独立历史，不合并旧项目历史。原创内容采用 MIT，第三方许可见 `THIRD_PARTY.md`。
 照片模板、姓名贴和卡片均由代码绘制；表情采用有明确授权的 Twemoji SVG。
 公开包名 `local.liuying.studio` 与开发版隔离，安装后不会覆盖开发版数据。
 
 运行 `python3 tests/check_release_assets.py` 检查素材来源和清单，浏览器回归见 `tests/check_release_artwork.py`。
-此仓库尚未推送，未承诺所有适用法域下均无风险；兼容性与发布边界见 `RELEASE_REVIEW.md`。
+兼容性与发布边界见 `RELEASE_REVIEW.md`。
 
 ## Mac AirPrint
 
