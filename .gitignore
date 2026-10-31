@@ -1,0 +1,13 @@
+/build/
+/deps/ort/
+/deps/*.aar
+/assets/models/*.onnx
+__pycache__/
+*.pyc
+.DS_Store
+*.apk
+*.keystore
+*.jks
+*.log
+.env
+.env.*

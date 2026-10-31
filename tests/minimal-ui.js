@@ -1,0 +1,14 @@
+(async()=>{
+ const snapshot=JSON.stringify(state),checks=[];const check=(v,m)=>{if(!v)throw Error(m);checks.push(m);};
+ try{
+  closeSheet();await loadPhoto({src:'/sample.svg'});state={...defaults,photos:[{src:'/sample.svg',width:1200,height:800,zoom:1,x:0,y:0},{src:'/sample.svg',width:1200,height:800,zoom:1,x:0,y:0}],active:0,orientation:'portrait'};render();
+  check(getComputedStyle($('deviceBtn')).display==='none'&&getComputedStyle($('modes')).display==='none','Large device card and mode strip removed from main view');check(document.querySelectorAll('.tool-tabs button').length===5,'Five bottom editing tools');check(!$('cropToggle')&&!$('cropDone'),'No crop-mode switches');
+  check(document.querySelectorAll('[data-remove-photo]').length===2&&!$('deletePhoto'),'Individual red X replaces standalone delete button');document.querySelector('[data-remove-photo="1"]').click();check(state.photos.length===1&&state.active===0,'X deletes its own photo only');$('photoUndo').querySelector('button').click();check(state.photos.length===2&&state.active===1,'Undo restores removed photo');
+  state.active=0;render();$('zoomIn').click();render();check(active().zoom>1&&$('preview').classList.contains('photo-zoomed'),'Plus enables single-finger panning automatically');$('reset').click();render();check(!$('preview').classList.contains('photo-zoomed'),'Reset restores page scrolling');
+  $('menuBtn').click();check(!!$('menuDevice')&&!!$('menuHistory'),'Device and history remain reachable in menu');closeSheet();$('layoutBtn').click();check(document.querySelectorAll('[data-layout-mode]').length===6,'All existing print layouts retained');closeSheet();
+  let templateCount=0;
+  for(const orientation of ['portrait','landscape'])for(const entry of TEMPLATE_CATALOG){state.mode='template';state.orientation=orientation;state.templateId=entry.id;active().templateId=entry.id;await TemplateStudio.ensureCurrent();render();const t=TemplateStudio.entry(),f=photoFrames[0];check(f.w===t.crop.width&&f.h===t.crop.height&&f.x===t.margin.left&&f.y===t.margin.top,'Template crop geometry '+orientation+'/'+entry.id);const output=physical(compose());if(output.width!==1216||output.height!==1824)throw Error('Template output size');templateCount++;}
+  await TemplateStudio.open();check(document.querySelectorAll('[data-template]').length===24,'Template picker exposes twenty-four designs');check([...document.querySelectorAll('[data-template] img')].every(img=>img.src.startsWith('data:image/jpeg')),'Template thumbnails render offline without badges');
+  return {passed:checks.length,templatesRendered:templateCount,checks:checks.filter(c=>!c.startsWith('Template crop geometry'))};
+ }finally{closeSheet();state=JSON.parse(snapshot);await TemplateStudio.ensureCurrent();LayerEditor.select(null);render();save();scrollTo(0,0);}
+})()

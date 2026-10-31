@@ -1,0 +1,15 @@
+Offline background removal
+
+U2NetP model: https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx
+Original model: https://github.com/xuebinqin/U-2-Net (Apache-2.0)
+Model conversion and preprocessing reference: https://github.com/danielgatis/rembg (MIT)
+U2NetP upstream MD5: 8e83ca70e441ab06c318d82300c84806
+Model SHA256: 309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8
+
+ONNX Runtime Android 1.23.2 (MIT)
+https://github.com/microsoft/onnxruntime
+https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.23.2/onnxruntime-android-1.23.2.aar
+
+Licenses are included alongside this file. All inference runs on the device.
+Input: RGB, 320x320, CHW, image-max scaling and ImageNet normalization.
+Output: 1959, normalized foreground mask. Original JPEG is retained.
