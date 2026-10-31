@@ -47,6 +47,21 @@ class Integration(unittest.IsolatedAsyncioTestCase):
             state=await (await client.get(w+'/api/state')).json();self.assertNotIn('airprint-',json.dumps(state))
             self.core.io_lock.release();await self.wait_done(2)
             self.assertEqual(self.core.jobs[0]['phase'],'done')
+    async def test_web_controls_airprint_layout_and_bluetooth_release(self):
+        studio=Studio(core=self.core);runner=web.AppRunner(web_app(studio));await runner.setup();self.addAsyncCleanup(runner.cleanup)
+        site=web.TCPSite(runner,'127.0.0.1',0);await site.start();url='http://127.0.0.1:'+str(site._server.sockets[0].getsockname()[1])
+        async with ClientSession(cookie_jar=CookieJar(unsafe=True),headers={'Origin':url}) as client:
+            await client.post(url+'/api/pair',data={'code':studio.code})
+            response=await client.post(url+'/api/airprint-layout',json={'splice':True});self.assertEqual(response.status,200)
+            self.assertEqual(self.adapter.media,5014)
+            self.assertTrue((await (await client.get(url+'/api/state')).json())['airprintSplice'])
+            self.core.device['media']=5009;self.assertEqual(self.adapter.media,5009)
+            self.assertEqual((await client.post(url+'/api/airprint-layout',json={'splice':False})).status,409)
+            self.assertEqual((await client.post(url+'/api/release',json={})).status,200)
+            self.assertTrue(self.core.released)
+            response=await client.post(url+'/api/print',json={'requestId':'released-test-request','pages':[page()]});self.assertEqual(response.status,409)
+            self.assertEqual(self.core.jobs,[])
+            self.assertEqual((await client.post(url+'/api/connect',json={})).status,200);self.assertFalse(self.core.released)
     async def test_retry_cancel_and_other_client(self):
         self.core.paused=True
         # A paused queue advertises unavailable, but can retain already admitted work.
@@ -74,12 +89,18 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((Path(self.tmp.name)/'jobs.json').read_bytes(),before)
     async def test_renderer_formats_and_all_papers(self):
         for paper,media,size in [('six',5012,(1216,1824)),('square',5009,(1040,1040)),('splice',5014,(1216,1824))]:
-            self.adapter.paper=paper
+            self.core.airprint_splice=paper=='splice'
+            async def status(media=media):self.core.device={'connected':True,'media':5012 if media==5014 else media}
+            self.core.status=status
+            await status()
             result=await self.call(request(2,media,photo((640,320))))
             self.assertEqual(result.code,0,result.values('status-message'))
             job=self.core.jobs[-1];self.assertEqual(job['media'],media)
             with Image.open(self.core.data/job['file']) as image:self.assertEqual(image.size,size)
-        self.adapter.paper='six'
+        self.core.airprint_splice=False
+        async def status():self.core.device={'connected':True,'media':5012}
+        self.core.status=status
+        await status()
         for index,mime in enumerate(('image/urf','image/pwg-raster')):
             suffix='urf' if mime=='image/urf' else 'pwg'
             for shape in ('one-page','landscape'):
@@ -129,6 +150,6 @@ class Integration(unittest.IsolatedAsyncioTestCase):
         out=io.BytesIO();im=Image.new('RGB',(200,300),'blue');im.save(out,'PDF',save_all=True,append_images=[Image.new('RGB',(300,200),'orange')])
         data=out.getvalue();attrs=[A(1,0x49,'document-format',b'application/pdf')]
         result=await self.call(request(2,90,data,attrs));self.assertEqual(result.code,0,result.values('status-message'));self.assertEqual(len(self.core.jobs[-1]['pages']),2)
-        self.adapter.paper='splice';result=await self.call(request(2,91,data,attrs));self.assertEqual(result.code,0,result.values('status-message'));self.assertEqual(len(self.core.jobs[-1]['pages']),1)
+        self.core.airprint_splice=True;result=await self.call(request(2,91,data,attrs));self.assertEqual(result.code,0,result.values('status-message'));self.assertEqual(len(self.core.jobs[-1]['pages']),1)
 
 if __name__=='__main__':unittest.main()

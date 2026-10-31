@@ -24,7 +24,7 @@ final class Store {
     static boolean terminal(JSONObject job){String s=job.optString("phase");return s.equals("done")||s.equals("cancelled")||s.equals("aborted")||s.equals("rejected");}
     static JSONObject state(Context c)throws Exception{
         JSONObject job=read(c,"job.json");
-        return new JSONObject().put("busy",busy).put("message",message).put("device",device).put("job",job)
+        return new JSONObject().put("airprintSplice",PrinterStatus.splice).put("busy",busy).put("message",message).put("device",device).put("job",job)
             .put("unresolved",job.has("token")&&!terminal(job)).put("history",read(c,"history.json").optJSONArray("items"));
     }
     static void archive(Context c,JSONObject job)throws Exception{
