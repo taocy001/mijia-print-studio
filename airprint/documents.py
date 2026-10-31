@@ -52,7 +52,9 @@ def pdf_page_images(data, max_pages=2):
         pdf1 = buf.getvalue()
         native_mime = 'application/x-mijia-photo-pdf' if _pdf_is_photo(lib, pdf1) else 'application/pdf'
         rgb, w, h = _native_render(lib, pdf1, native_mime)
-        imgs.append(Image.frombytes('RGB', (w, h), rgb))
+        image = Image.frombytes('RGB', (w, h), rgb)
+        image.info['studio_photo'] = native_mime == 'application/x-mijia-photo-pdf'
+        imgs.append(image)
     return imgs
 
 
@@ -67,4 +69,4 @@ def prepare_document(data, mime, *, scaling="fill", rotate_180=False, centering=
     if mime == 'application/pdf' and not photo: scaling = 'fit'
     rgb, w, h = _native_render(lib, data, native_mime)
     # PDF renderer preserves page aspect; the requested fit/fill is applied here.
-    return prepare_rgb(rgb, w, h, scaling=scaling, rotate_180=rotate_180, centering=centering, orientation=orientation)
+    return prepare_rgb(rgb, w, h, scaling=scaling, rotate_180=rotate_180, centering=centering, orientation=orientation, face_aware=photo)

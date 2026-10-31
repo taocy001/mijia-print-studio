@@ -1,5 +1,5 @@
 """Read-only status recovery; no Bluetooth hardware."""
-import asyncio,tempfile,threading,unittest,sys
+import asyncio,tempfile,threading,time,unittest,sys
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -41,12 +41,13 @@ class StatusTests(unittest.IsolatedAsyncioTestCase):
    finally:finish.set()
    with self.assertRaises(asyncio.CancelledError):await task
    self.assertFalse(self.core.io_lock.locked())
- async def test_successful_queries_share_connection_until_shutdown(self):
-  with patch.object(self.core,'printer',return_value=self.printer()) as factory:
-   await self.core.status();await self.core.status();await self.core.status()
-   self.assertEqual(factory.call_count,1)
-   await self.core.stop(None)
-   self.assertIsNone(self.core.device_printer)
+ async def test_each_successful_probe_releases_its_connection(self):
+  printer=self.printer()
+  with patch.object(printer,'close') as close,patch.object(self.core,'printer',return_value=printer) as factory:
+   for _ in range(3):
+    await self.core.status();self.assertIsNone(self.core.device_printer)
+   self.assertEqual(factory.call_count,3);self.assertEqual(close.call_count,3)
+   self.assertTrue(self.core.airprint_ready())
  async def test_broken_connection_is_closed_before_reconnect(self):
   bad=self.printer();good=self.printer()
   with patch.object(bad,'get_prop',side_effect=OSError('disconnected')),patch.object(bad,'close') as close,patch.object(self.core,'printer',side_effect=[bad,good]) as factory:
@@ -71,7 +72,7 @@ class StatusTests(unittest.IsolatedAsyncioTestCase):
   finally:self.core.jobs.clear()
  async def test_airprint_layout_never_overrides_physical_tray(self):
   adapter=AirPrint(self.core,'ipp://localhost:1/ipp/print',paper='splice')
-  self.core.device={'connected':True,'media':5009};self.assertEqual(adapter.media,5009)
+  self.core.device={'connected':True,'media':5009,'checkedAt':int(time.time()*1000)};self.assertEqual(adapter.media,5009)
   self.core.device['media']=5012;self.assertEqual(adapter.media,5014)
   self.core.airprint_splice=False;self.assertEqual(adapter.media,5012)
   self.core.device={};self.assertEqual(adapter.media,0)

@@ -18,7 +18,7 @@ window.LayerEditor = (() => {
   function layerSize(){const s=space();return[s.w,s.h];}
   function selected(){return list().find(o=>o.id===selectedId)||null;}
   function uid(){return 'layer-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);}
-  function select(id){if(document.body.classList.contains('layer-editing')&&editingId&&id!==editingId)closeSheet();selectedId=id;scope=scopeKey();refresh();}
+  function select(id){const switchEditor=document.body.classList.contains('layer-editing')&&editingId&&id!==editingId;selectedId=id;scope=scopeKey();if(switchEditor){editingId=null;const o=selected();if(o)openEditor(o);else closeSheet();}refresh();}
   function characters(value){return typeof Intl.Segmenter==='function'?[...new Intl.Segmenter('zh',{granularity:'grapheme'}).segment(value)].map(s=>s.segment):Array.from(value);}
   function metrics(o,w,h){
     const font=(FONTS[o.font]||FONTS.sans)[1];let size=Math.max(2,Math.min(32,Number(o.sizePct)||9))*w/100;
@@ -76,7 +76,7 @@ window.LayerEditor = (() => {
     const now=scopeKey();if(scope!==now){if(document.body.classList.contains('layer-editing'))closeSheet();selectedId=null;scope=now;pointers.clear();gestureTarget=null;resizeState=null;previous=null;}
     const o=selected(),box=$('layerSelection'),handle=$('layerResize');document.body.classList.toggle('object-selected',!!o);
     if(o&&editingId===o.id&&document.body.classList.contains('layer-editing')){for(const key of ['sizePct','angle']){const input=$('sheetBody').querySelector('[data-layer-range='+key+']');if(input){input.value=o[key];$('out-'+key).value=Math.round(o[key]);}}}
-    $('layerTools').hidden=!o;$('layerName').textContent=o?((o.hidden?'覆膜 · ':'')+(o.kind==='emoji'?'已选表情':'已选文字')):'';
+    $('layerTools').hidden=!o;$('photoTools').hidden=!!o;document.querySelector('.photo-tools').setAttribute('aria-label',o?'文字与表情快捷工具':'照片快捷工具');$('layerName').textContent=o?((o.hidden?'覆膜 · ':'')+(o.kind==='emoji'?'已选表情':'已选文字')):'';
     box.hidden=handle.hidden=!o||peek||!readyPhoto();
     if(!o||peek||!readyPhoto())return;
     const [w,h]=layerSize(),m=metrics(o,w,h),rect=$('preview').getBoundingClientRect(),view=window.CropEditor?.geometry()||{tx:0,ty:0},origin=space(),scale=rect.width/$('preview').width;
@@ -88,7 +88,7 @@ window.LayerEditor = (() => {
     const halfH=(Math.max(44,m.width*scale)*sn+Math.max(44,m.height*scale)*c)/2;
     const hx=cx+(cx+halfW+48<rect.width?1:-1)*(halfW+28),hy=cy+(cy+halfH+48<rect.height?1:-1)*(halfH+28);
     Object.assign(handle.style,{left:Math.max(24,Math.min(rect.width-24,hx))+'px',top:Math.max(24,Math.min(rect.height-24,hy))+'px'});
-    $('editLayer').textContent=o.kind==='emoji'?'调整':'编辑';
+    $('editLayer').setAttribute('aria-label','编辑');
   }
   function readyPhoto(){return ready()!==false;}
   function create(values){const o={id:uid(),kind:'text',text:'',fx:.5,fy:.5,sizePct:9,angle:0,font:'sans',color:'#ffffff',stroke:'#203d33',bubble:'',align:'center',...values};list().push(o);select(o.id);schedule();return o;}
@@ -99,9 +99,9 @@ window.LayerEditor = (() => {
   function range(key,label,value,min,max){return `<label class="layer-range">${label}<output id="out-${key}">${value}</output><input data-layer-range="${key}" type="range" min="${min}" max="${max}" step="1" value="${value}"></label>`;}
   function openEditor(o){
     if(o)select(o.id);const isText=!o||o.kind==='text';
-    drawer(isText?(o?'编辑文字':'添加文字'):'调整表情',`${isText?`<textarea id="layerText" maxlength="160" placeholder="写下想留在照片上的话" aria-label="照片上的文字">${esc(o?.text||'')}</textarea><div class="layer-options" id="fontOptions">${Object.entries(FONTS).map(([k,v])=>`<button data-font="${k}" style="font-family:${v[1]}" class="${(o?.font||'sans')===k?'selected':''}">${v[0]}</button>`).join('')}</div><div class="color-options">${COLORS.map(c=>`<button data-color="${c}" aria-label="文字颜色 ${c}" aria-pressed="${(o?.color||'#ffffff')===c}" style="--swatch:${c}"></button>`).join('')}</div><div class="layer-options"><button id="layerStroke" aria-pressed="${!!(o?.stroke??true)}">描边</button><button id="layerBubble" aria-pressed="${!!o?.bubble}">底色</button><button id="layerAlign">对齐：${o?.align==='left'?'左':o?.align==='right'?'右':'居中'}</button></div>`:`<button class="full-button secondary-button" id="replaceEmoji">更换表情 ${esc(o.text)}</button>`}${list().length>1?'<button class="layer-picker" id="pickCoveredLayer">选择被遮住的文字或表情</button>':''}<label class="coat-switch"><span>隐藏到覆膜<small>仅侧光下可见，不印入照片颜色</small></span><input id="layerHidden" type="checkbox" role="switch" ${o?.hidden?'checked':''}></label>${range('sizePct','大小',o?.sizePct||9,2,32)}${range('angle','旋转',o?.angle||0,-180,180)}<p class="hint">在照片上拖动位置 · 拖动圆形手柄缩放 · 双指缩放、旋转</p>`);
-    let draft=o,pending={font:'sans',color:'#ffffff',stroke:'#203d33',bubble:'',align:'center',sizePct:9,angle:0};editingId=o?.id||null;
-    const edit=(fn)=>{fn(draft||pending);if(!draft&&$('layerText')?.value.trim()){draft=create({...pending,text:$('layerText').value});editingId=draft.id;}if(draft){constrain(draft);schedule();}};
+    drawer(isText?(o?'编辑文字':'添加文字'):'编辑表情',`${isText?`<textarea id="layerText" maxlength="160" placeholder="写下想留在照片上的话" aria-label="照片上的文字">${esc(o?.text||'')}</textarea><div class="layer-options" id="fontOptions">${Object.entries(FONTS).map(([k,v])=>`<button data-font="${k}" style="font-family:${v[1]}" class="${(o?.font||'sans')===k?'selected':''}">${v[0]}</button>`).join('')}</div><div class="color-options">${COLORS.map(c=>`<button data-color="${c}" aria-label="文字颜色 ${c}" aria-pressed="${(o?.color||'#ffffff')===c}" style="--swatch:${c}"></button>`).join('')}</div><div class="layer-options"><button id="layerStroke" aria-pressed="${!!(o?.stroke??true)}">描边</button><button id="layerBubble" aria-pressed="${!!o?.bubble}">底色</button><button id="layerAlign">对齐：${o?.align==='left'?'左':o?.align==='right'?'右':'居中'}</button></div>`:`<button class="full-button secondary-button" id="replaceEmoji">更换表情 ${esc(o.text)}</button>`}${list().length>1?'<button class="layer-picker" id="pickCoveredLayer">选择被遮住的文字或表情</button>':''}<label class="coat-switch"><span>隐藏到覆膜<small>仅侧光下可见，不印入照片颜色</small></span><input id="layerHidden" type="checkbox" role="switch" ${o?.hidden?'checked':''}></label>${range('sizePct','大小',o?.sizePct||9,2,32)}${range('angle','旋转',o?.angle||0,-180,180)}<p class="hint">在照片上拖动位置 · 拖动圆形手柄缩放 · 双指缩放、旋转</p>`);
+    const editorScope=scopeKey();let draftId=o?.id,pending={font:'sans',color:'#ffffff',stroke:'#203d33',bubble:'',align:'center',sizePct:9,angle:0};editingId=o?.id||null;
+    const edit=(fn)=>{if(scopeKey()!==editorScope)return;let draft=draftId?list().find(item=>item.id===draftId):null;if(draftId&&!draft)return;fn(draft||pending);if(!draft&&$('layerText')?.value.trim()){draft=create({...pending,text:$('layerText').value});draftId=editingId=draft.id;}if(draft){constrain(draft);schedule();}};
     $('layerHidden').onchange=e=>edit(l=>l.hidden=e.target.checked);
     if(isText){$('layerText').oninput=e=>edit(l=>l.text=e.target.value);
       $('fontOptions').onclick=e=>{const b=e.target.closest('[data-font]');if(!b)return;edit(l=>l.font=b.dataset.font);$('fontOptions').querySelectorAll('button').forEach(x=>x.classList.toggle('selected',x===b));};

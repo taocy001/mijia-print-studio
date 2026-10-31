@@ -10,6 +10,20 @@ from PIL import Image
 from .bluetooth_client import BluetoothClient
 
 
+def terminal_info(info):
+    keys=('job-state','transfer-status','file-size','transfer-size','print-page','printing-page-number','print-time','error-code','job-sub-state','job-state-reason')
+    return {key:info[key] for key in keys if type(info.get(key)) in (int,float)}
+
+def terminal_message(info):
+    state=info.get('job-state')
+    if state==9:return '打印完成'
+    if state==8:return '任务已取消'
+    expected,received=info.get('file-size'),info.get('transfer-size')
+    if state==7 and info.get('transfer-status')==3 and type(expected) is int and type(received) is int and expected>received>=0:
+        return f'传输未完成：缺少 {expected-received} 字节（已接收 {received}/{expected}）；不会自动重印'
+    return {9:'打印完成',8:'任务已取消',7:'设备已中止任务，请检查相纸、耗材和设备状态'}.get(info.get('job-state'),'打印结果待核对')
+
+
 class BluetoothPrinter:
     @staticmethod
     def validate_media(media_size):
@@ -51,7 +65,7 @@ class BluetoothPrinter:
             os.close(fd)
 
     def print_photo(self, files, copies=1, sharpen=0, media_size=5012,
-                    log=print, on_lower_quality=None, on_cancel=None):
+                    log=print, on_lower_quality=None, on_cancel=None, on_state=None):
         self.validate_media(media_size)
         expected_width, expected_height = (1040, 1040) if media_size == 5009 else (1216, 1824)
         if type(copies) is not int or copies < 1:
@@ -91,6 +105,7 @@ class BluetoothPrinter:
         if status[0] != '::0' or status[1].get('media-size') != (5012 if media_size == 5014 else media_size) or jobs.get('job-id-list') not in ('', []):
             raise RuntimeError('请检查相纸、耗材和打印机队列')
         record = {'phase': 'creating'}
+        if on_state:on_state(dict(record))
         self._record(record, create=True)
         result = self.client.rpc('print-job', {
             'copies': copies, 'file-size': len(data)+(len(coat) if coat else 0), 'job-type': 0, 'file-type': 'jpg',
@@ -101,9 +116,9 @@ class BluetoothPrinter:
             raise RuntimeError('蓝牙任务未确认；保留记录，不自动重试')
         record.update(phase='uploading', job=job)
         self._record(record)
-        if coat is not None:
-            self.client.upload(job, coat)
-        self.client.upload(job, data)
+        if on_state:on_state(dict(record))
+        # One stream keeps binary overcoat tails away from final AES zero padding.
+        self.client.upload(job, (coat or b'') + data)
         log('传输完成，等待打印机确认打印结果…')
         cancel_sent=False
         for _ in range(150):
@@ -116,8 +131,9 @@ class BluetoothPrinter:
             info = matches[0]
             state = info.get('job-state')
             if state in (7, 8, 9):
-                self.last_state=state
+                self.last_state=state;self.last_info=terminal_info(info)
                 self.intent.unlink()
+                if on_state:on_state(dict(phase={9:'done',8:'cancelled',7:'aborted'}[state],job=job,info=self.last_info,message=terminal_message(self.last_info)))
                 log('打印完成' if state == 9 else '打印已中止')
                 return state == 9
             time.sleep(2)

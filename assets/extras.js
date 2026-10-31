@@ -1,9 +1,9 @@
 /* Additional tools stay inside the existing drawers. */
 window.StudioExtras=(()=>{
  const cards=[['reading','阅读打卡'],['habit','积分卡'],['todo','每日计划'],['schedule','课程表'],['luggage','行李牌'],['praise','鼓励卡'],['invite','邀请卡']];
- const textures=[['','无纹理'],['dots','微点'],['lines','细纹'],['grid','格纹'],['hearts','爱心'],['custom','自选图片']];
+ const textures=[['','高亮覆膜'],['dots','微点'],['lines','细纹'],['grid','格纹'],['hearts','爱心'],['custom','自选图片']];
  const setting=()=>['label','card'].includes(state.mode)||(state.mode==='calendar'&&(state.calendarLayout==='plain'||state.media===5014))?state:active()||state;
- function openCoat(){const p=setting();openSheet('coat','覆膜',`<div class="mode-grid">${textures.map(([id,name])=>`<button data-coat="${id}" class="${(p.coatTexture||'')===id?'selected':''}">${name}</button>`).join('')}</div><label class="layer-range">纹理深浅<output id="coatValue">${p.coatThreshold||100}</output><input id="coatThreshold" type="range" min="60" max="140" value="${p.coatThreshold||100}"></label><p class="hint">纹理与隐藏文字、表情一起印入覆膜，侧光下可见。编辑画面以金色示意，最终照片颜色层不包含这些内容。覆膜会增加耗材用量。</p>`);
+ function openCoat(){const p=setting();openSheet('coat','覆膜',`<div class="mode-grid">${textures.map(([id,name])=>`<button data-coat="${id}" class="${(p.coatTexture||'')===id?'selected':''}">${name}</button>`).join('')}</div><label class="layer-range">纹理深浅<output id="coatValue">${p.coatThreshold||100}</output><input id="coatThreshold" type="range" min="60" max="140" value="${p.coatThreshold||100}"></label>`);
  $('sheetBody').querySelectorAll('[data-coat]').forEach(b=>b.onclick=()=>{if(b.dataset.coat==='custom'){bridge('pickTexture');return;}p.coatTexture=b.dataset.coat;schedule();openCoat();});$('coatThreshold').oninput=e=>{p.coatThreshold=+e.target.value;$('coatValue').value=e.target.value;save();};}
  function pattern(ctx,w,h,p){const kind=p?.coatTexture;if(!kind)return;ctx.save();ctx.fillStyle='white';ctx.strokeStyle='white';ctx.lineWidth=3;
   if(kind==='custom'&&images.has(p.coatSource)){const c=document.createElement('canvas');c.width=w;c.height=h;const m=c.getContext('2d');m.drawImage(images.get(p.coatSource),0,0,w,h);const d=m.getImageData(0,0,w,h);for(let i=0;i<d.data.length;i+=4){const v=.299*d.data[i]+.587*d.data[i+1]+.114*d.data[i+2]>=100?255:0;d.data[i]=d.data[i+1]=d.data[i+2]=255;d.data[i+3]=v;}m.putImageData(d,0,0);ctx.drawImage(c,0,0);}
@@ -14,11 +14,12 @@ window.StudioExtras=(()=>{
   if(!['label','card'].includes(state.mode)&&!(state.mode==='calendar'&&(state.calendarLayout==='plain'||state.media===5014))&&(state.media===5014||state.mode==='collage'))for(const f of frames){ctx.save();ctx.beginPath();ctx.rect(f.x,f.y,f.w,f.h);ctx.clip();ctx.translate(f.x,f.y);pattern(ctx,f.w,f.h,f.p);ctx.restore();}
   else pattern(ctx,w,h,setting());ctx.restore();
  }
- function openPrintOptions(){openSheet('printOptions','打印设置',`<div class="field"><label>每个作品的份数</label><input id="extraCopies" type="number" min="1" max="10" value="${state.copies||1}"></div><p class="hint">预览时会列出作品和实际相纸总数，确认后才打印。</p>`);$('extraCopies').onchange=e=>{state.copies=Math.max(1,Math.min(10,Math.round(+e.target.value)||1));e.target.value=state.copies;save();};}
+
  function drawCard(ctx,x,y,w,h){CardArt.draw(ctx,x,y,w,h);}
+ function idCardCapacity(){const [w,h]=logicalSize(),vertical=state.idCardOrientation==='portrait';return state.media===5014||(vertical&&w>h)||(!vertical&&h>w)?2:1;}
  function drawIdCardSheet(ctx,w,h){
   const vertical=state.idCardOrientation==='portrait',ow=vertical?686:1059,oh=vertical?1059:686;
-  const first=active(),last=first;
+  const start=Math.floor(state.active/idCardCapacity())*idCardCapacity(),first=state.photos[start]||active(),last=state.photos[start+1]||first;
   function place(p,x,y,scale=1,bottom=h){const pw=Math.round(ow*scale),ph=Math.round(oh*scale),bleed=Math.round(24*scale),cw=Math.round((vertical?638:1011)*scale),ch=Math.round((vertical?1011:638)*scale);
    drawPhoto(ctx,p,x,y,pw,ph,'cover');ctx.strokeStyle='#475569';ctx.lineWidth=2;ctx.strokeRect(x+bleed,y+bleed,cw-1,ch-1);
    if(y+ph+42<=bottom)text(ctx,vertical?'竖版成品 · 实线裁切':'实线内成品85.6×53.98mm · 四边2mm出血',x+pw/2,y+ph+27,19,'#64748B');
@@ -43,16 +44,13 @@ window.StudioExtras=(()=>{
   if($('extraText'))$('extraText').onclick=openLegacyText;if($('lunarToggle'))$('lunarToggle').onchange=e=>{state.lunar=e.target.checked;schedule();};
 
  };
- const originalMenu=$('menuBtn').onclick;$('menuBtn').onclick=()=>{originalMenu();$('sheetBody').insertAdjacentHTML('beforeend','<button class="menu-row" id="menuPrintOptions">打印设置</button><button class="menu-row" id="menuCoat">覆膜纹理</button>');$('menuPrintOptions').onclick=openPrintOptions;$('menuCoat').onclick=openCoat;};
+ const originalMenu=$('menuBtn').onclick;$('menuBtn').onclick=()=>{originalMenu();$('sheetBody').insertAdjacentHTML('beforeend',`<div class="menu-row copies-row">${icon('copy')}<span>打印份数</span><div class="copies-stepper"><button id="copiesMinus" aria-label="减少打印份数">${icon('minus')}</button><output id="copiesValue" aria-live="polite"></output><button id="copiesPlus" aria-label="增加打印份数">${icon('plus')}</button></div></div><button class="menu-row" id="menuCoat">${icon('spark')}<span>覆膜纹理</span>${icon('chevron')}</button>`);
+  const update=()=>{const n=Math.max(1,Math.min(10,Math.round(+state.copies)||1));$('copiesValue').value=n;$('copiesMinus').disabled=n===1;$('copiesPlus').disabled=n===10;};
+  for(const [id,step] of [['copiesMinus',-1],['copiesPlus',1]])$(id).onclick=()=>{state.copies=Math.max(1,Math.min(10,(Math.round(+state.copies)||1)+step));update();schedule();};update();$('menuCoat').onclick=openCoat;};
  const oldNative=window.nativeEvent;window.nativeEvent=async e=>{if(e.type==='texture'){const p=e.value[0];if(p){await loadPhoto(p);Object.assign(setting(),{coatTexture:'custom',coatSource:p.src});schedule();openCoat();}}else await oldNative(e);};
  for(const p of [...state.photos,state])if(p.coatSource)loadPhoto({src:p.coatSource}).then(schedule).catch(()=>{});
  const photoTemplates=$('templateBtn').onclick,photoText=$('addTextQuick').onclick;
  $('templateBtn').onclick=()=>['label','card'].includes(state.mode)?openLayout():photoTemplates();
  $('addTextQuick').onclick=()=>['label','card'].includes(state.mode)?openLegacyText():photoText();
- return {paintCoat,drawCard,drawIdCardSheet,openCoat,openPrintOptions};
+ return {paintCoat,drawCard,drawIdCardSheet,idCardCapacity,openCoat};
 })();
-
-{
- const menu=$('menuBtn').onclick;
- $('menuBtn').onclick=()=>{menu();$('sheetBody').insertAdjacentHTML('beforeend','<button class="menu-row" id="artCredits">素材与许可</button>');$('artCredits').onclick=()=>openSheet('credits','素材与许可','<p>原创模板、姓名贴和卡片：留影工坊，MIT。</p><p>表情：Twemoji 14.0.2，Twitter, Inc. and other contributors，CC BY 4.0，使用未修改的上游图形。</p><p>github.com/twitter/twemoji · creativecommons.org/licenses/by/4.0/</p><p>字体：ZCOOL KuaiLe、Ma Shan Zheng，SIL OFL 1.1。</p><p>协议参考：xiaomi-photo-printer，MIT。抠图：U2NetP（Apache-2.0）、rembg 与 ONNX Runtime（MIT）。</p><p>完整许可随源码和安装包 assets 目录提供。本项目与设备厂商无隶属或背书关系。</p>');};
-}

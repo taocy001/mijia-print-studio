@@ -10,7 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch,Mock
 from bluetooth_client import BluetoothClient
 
 ADDRESS='00:00:00:00:00:00'
@@ -61,6 +61,27 @@ class RecoveryTests(unittest.TestCase):
   finally:
    if child.poll() is None:child.kill();child.wait()
    child.stdout.close();child.stderr.close()
+ def test_close_failure_releases_local_lock(self):
+  first=self.client();second=self.client()
+  with patch.object(first,'connect',return_value=first):first.open()
+  with patch.object(first,'_close_transport',side_effect=OSError('helper cleanup')):
+   with self.assertRaises(OSError):first.close()
+  self.assertIsNone(first.lock)
+  with patch.object(second,'connect',return_value=second):second.open();second.close()
+ def test_cleanup_closes_both_streams_after_timeout_and_close_error(self):
+  client=self.client();process=Mock();client.p=process;process.poll.return_value=None
+  process.wait.side_effect=[subprocess.TimeoutExpired('helper',3),0];process.stdin.close.side_effect=OSError('pipe cleanup')
+  with self.assertRaisesRegex(OSError,'pipe cleanup'):client.close()
+  process.kill.assert_called_once();process.stdout.close.assert_called_once();self.assertIsNone(client.p)
+ def test_context_cleanup_does_not_replace_operation_error(self):
+  client=self.client()
+  with patch.object(client,'close',side_effect=OSError('cleanup')):
+   self.assertIsNone(client.__exit__(TimeoutError,TimeoutError('upload'),None))
+ def test_open_failure_keeps_original_error_if_cleanup_also_fails(self):
+  client=self.client()
+  with patch.object(client,'connect',side_effect=ValueError('handshake')),patch.object(client,'_close_transport',side_effect=OSError('cleanup')):
+   with self.assertRaisesRegex(ValueError,'handshake'):client.open()
+  self.assertIsNone(client.lock)
  def test_address_separators_share_lock(self):
   a=self.client();b=BluetoothClient('00-00-00-00-00-00','/unused')
   with patch.object(a,'connect',return_value=a):a.open()

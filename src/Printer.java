@@ -71,9 +71,7 @@ final class Printer implements AutoCloseable {
         try{int total=(jpeg.length+987)/988;
             for(int i=0;i<total;i++){
                 if(Store.cancel)throw new IOException("已请求取消传输，请检查任务状态");
-                int offset=i*988,len=Math.min(988,jpeg.length-offset);
-                byte[] body=ByteBuffer.allocate(4+len).order(ByteOrder.LITTLE_ENDIAN).putInt(job).put(jpeg,offset,len).array();
-                socket.getOutputStream().write(Wire.frame(4,6,2,sequence++,total,i+1,Wire.crypt(key,body,true)));
+                socket.getOutputStream().write(Wire.uploadFrame(key,job,jpeg,i,sequence++));
                 if((i+1)%3==0||i+1==total){socket.getOutputStream().flush();Thread.sleep(15);}
                 if((i+1)%12==0||i+1==total)progress.update((i+1)*100/total);
             }

@@ -14,8 +14,9 @@ Android App 内主动开启同一 Wi-Fi 共享，本机直接使用 App。
 - `POST /api/pair`：表单 `code`，成功后转到编辑器。
 - `GET /api/sharing`：已配对客户端读取共享 HTTP 地址及 AirPrint 状态，不返回配对码。
 - `GET /api/state`：当前会话任务、历史和设备状态，不暴露其他浏览器照片。
-- `POST /api/upload`：原始图片二进制，最多 25 MB；返回 `{src,width,height}`。Android 转为 JPEG 并限制长边 2400。
+- `POST /api/upload`：原始图片二进制，最多 25 MB；返回 `{src,width,height,faces}`，`faces` 为归一化 `[left,top,right,bottom]` 数组，检测不可用时为空。Android 转为 JPEG 并限制长边 2400。
 - `POST /api/cutout`：`{source}`，返回 `{images:{white,blue,red}}`。
+- `POST /api/reprint`：`{token,requestId,confirmed:true}`，重印本人的完整已完成批次，保留原JPEG、覆膜与逐页参数；同请求不重复入队。
 - `POST /api/print`：`{requestId,pages}`，最多六张相纸；同会话同 requestId 同内容不重复入队，不同内容拒绝。
 - `POST /api/connect`、`/api/reconcile`、`/api/cancel`：连接状态、查询自己的任务、取消自己的任务。
 - `GET /private/...`：只能读取此会话导入或生成的图片。
@@ -29,7 +30,7 @@ Android App 内主动开启同一 Wi-Fi 共享，本机直接使用 App。
 打印与状态检查共用蓝牙互斥锁；远程请求进入串行队列，失败或结果未知时暂停，不自动重印。
 停止共享会撤销配对并取消尚未开始的队列；已开始的批次继续由前台服务管理。
 进程被杀后不自动恢复打印；再次开启共享时取消旧等待任务，未知的已提交任务需在手机上检查。
-会话结束后浏览器草稿不能跨新会话读取旧私有照片，需重新选择照片。
+会话token仅保存在内存；停止共享或重启后必须重新配对。独立的HttpOnly归属Cookie可在配对成功后恢复本人照片与历史，不单独授权访问。归属密钥以哈希保存；同归属多会话合并文件授权。升级前已丢失的临时身份不自动恢复。
 
 ## 电脑后端
 
@@ -37,12 +38,13 @@ Android App 内主动开启同一 Wi-Fi 共享，本机直接使用 App。
 `printing/` 持有公共队列、图片校验和蓝牙后端；`web/native/` 为系统蓝牙助手。Web 与 AirPrint 均不调用旧项目或彼此入口。
 `desktop/serve.py` 为两个独立 HTTP 适配器注入同一个 PrintService。服务级锁阻止同一设备出现第二个队列，底层设备锁仍防止与旧程序同时连接。
 模拟模式不构建 BluetoothPrinter，也不启动蓝牙助手。
-电脑端已提交任务支持请求取消；异常结果保留打印意图记录，暂停队列，不自动重印。电脑端支持查询已取得编号的原任务；没有任务编号或服务重启后的未知记录仍需在服务端核对。
+电脑端已提交任务支持请求取消；异常结果保留打印意图记录，暂停队列，不自动重印。电脑端支持查询原任务；本机已配对管理员可核对或明确结束未知记录。
 
-## 迁移边界
+## 平台差异
 
 共用编辑器、Android 承载 Web、电脑 Web、AirPrint 与蓝牙后端已进入同一仓库。
-原电脑 Web、AirPrint/AirDrop 源码与数据保留用于回退。部署时由统一服务接管原端口，旧任务不自动迁移或重放。
+旧任务不自动迁移或重放。Mac和Android通过持久owner Cookie恢复重新配对后的本人照片与历史，登录会话仍须重新建立。
+两端均提供精确重印。Mac另提供仅本机已配对管理员可访问的 `/api/admin/queue`、`/api/admin/reconcile`、`/api/admin/resolve`；Android尚无这些接口。
 手机 App 与浏览器使用相同的编辑数据、模板和合成实现；平台相关的文件导入、抠图与蓝牙能力保留独立适配。
 
 ## 公共打印核心

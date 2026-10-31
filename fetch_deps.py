@@ -4,6 +4,7 @@ import hashlib,json,urllib.request
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent
 URLS={
+ 'assets/models/face_detection_yunet_2023mar.onnx':'https://media.githubusercontent.com/media/opencv/opencv_zoo/f12e12798e8314f7c074a6656816c048dcc95b7a/models/face_detection_yunet/face_detection_yunet_2023mar.onnx',
  'deps/onnxruntime-android-1.23.2.aar':'https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-android/1.23.2/onnxruntime-android-1.23.2.aar',
  'assets/models/u2netp.onnx':'https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx',
 }

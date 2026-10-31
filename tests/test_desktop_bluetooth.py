@@ -149,6 +149,21 @@ class WebBluetoothTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.printer.print_photo([b'coat', self.photo])
         self.assertEqual(self.calls, [])
 
+    def test_aborted_transfer_retains_safe_diagnostics(self):
+        original=self.rpc;states=[]
+        def rpc(method,params):
+            if method=='get-job-info':return [{'job-id':42,'job-state':7,'transfer-status':3,'file-size':367542,'transfer-size':367541,'print-page':0,'print-time':0,'file':'private photo','person':'private'}]
+            return original(method,params)
+        self.rpc=rpc
+        self.assertFalse(self.printer.print_photo([self.photo],log=lambda _:None,on_state=states.append))
+        self.assertEqual(self.printer.last_state,7);self.assertEqual(self.printer.last_info['transfer-size'],367541)
+        self.assertNotIn('file',self.printer.last_info);self.assertNotIn('person',self.printer.last_info)
+        self.assertEqual(states[-1]['phase'],'aborted');self.assertIn('缺少 1 字节',states[-1]['message'])
+        self.assertFalse(self.printer.intent.exists())
+        from bluetooth_printer import terminal_message
+        self.assertEqual(terminal_message({**self.printer.last_info,'job-state':9}),'打印完成')
+        self.assertEqual(terminal_message({**self.printer.last_info,'job-state':8}),'任务已取消')
+
 class MediaValidationTests(unittest.TestCase):
  def test_unsupported_paper_is_reported_before_mask_or_device_commands(self):
   printer=object.__new__(BluetoothPrinter)
@@ -178,7 +193,7 @@ class SquareBluetoothTests(WebBluetoothTests):
         create = next(p for m,p in self.calls if m=='print-job')
         self.assertEqual(create['media-size'],5009)
         self.assertEqual(create['file-size'],len(coat)+len(self.square))
-        self.assertEqual(self.uploaded,[coat,self.square])
+        self.assertEqual(self.uploaded,[coat+self.square])
 
     def test_square_rejects_six_inch_image(self):
         with self.assertRaisesRegex(ValueError,'1040'):
@@ -190,3 +205,40 @@ class SquareBluetoothTests(WebBluetoothTests):
             self.printer.print_photo([self.square],media_size=5009)
         self.assertFalse(self.printer.intent.exists())
         self.assertFalse(any(m=='print-job' for m,p in self.calls))
+
+class CombinedStreamTests(unittest.TestCase):
+    """Model final-fragment zero unpadding; full fragments remain binary intact."""
+    def wire(self,parts):
+        client=BluetoothTests().client();frames=[];client.send=frames.append
+        with patch('bluetooth_client.time.sleep'):
+            for part in parts:client.upload(42,part)
+        received=[]
+        for frame_data in frames:
+            total,number=struct.unpack('<HH',frame_data[14:18]);plain=crypt(client.key,frame_data[20:-2],False)
+            self.assertEqual(struct.unpack('<I',plain[:4])[0],42)
+            payload=plain[4:]
+            if number==total:payload=payload.rstrip(b'\0')
+            received.append(payload)
+        return b''.join(received),frames
+    def coat(self):
+        import random,zlib
+        for seed in range(40):
+            rng=random.Random(seed);raw=bytes(255 if rng.random()>.8 else 0 for _ in range(4000))+bytes(1040*1040-4000)
+            encoder=zlib.compressobj(6,zlib.DEFLATED,-15);packed=encoder.compress(raw)+encoder.flush()
+            if packed.endswith(b'\0'):break
+        self.assertTrue(packed.endswith(b'\0'))
+        return b'ocpattern1\0\0'+struct.pack('>IIIIBBH',1040,1040,len(packed),1,183,103,0)+packed,raw
+    def test_final_fragment_model_reproduces_loss_and_preserves_combined_stream(self):
+        import zlib
+        coat,raw=self.coat();photo=io.BytesIO();Image.new('RGB',(1040,1040),'red').save(photo,'JPEG');jpeg=photo.getvalue()
+        legacy,_=self.wire([coat,jpeg]);self.assertEqual(len(legacy),len(coat)+len(jpeg)-(len(coat)-len(coat.rstrip(b'\0'))))
+        received,frames=self.wire([coat+jpeg]);self.assertEqual(received,coat+jpeg)
+        self.assertEqual([struct.unpack('<HH',f[14:18]) for f in frames],[(len(frames),i+1) for i in range(len(frames))])
+        self.assertEqual(zlib.decompress(received[32:len(coat)],-15),raw)
+        self.assertEqual(received[len(coat):],jpeg)
+    def test_combined_stream_over_one_megabyte_preserves_full_chunk_zero_tails(self):
+        data=(b'abcd'+bytes(984))*1100+b'\xff\xd9'
+        self.assertGreater(len(data),1048576)
+        received,_=self.wire([data]);self.assertEqual(received,data)
+        client=BluetoothTests().client();client.send=lambda _:self.fail('must reject before sending')
+        with self.assertRaises(ValueError):client.upload(42,bytes(2097153))

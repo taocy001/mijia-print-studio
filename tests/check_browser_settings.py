@@ -33,10 +33,18 @@ with sync_playwright() as p:
  assert page.evaluate("sheetKind==='sharing'&&!$('sheet').hidden")
  page.screenshot(path='/tmp/liuying-settings-addresses.png')
  page.locator('#shareAddress0').click();page.wait_for_timeout(1400);assert page.locator('#shareAddress0').evaluate('(e)=>e===document.activeElement')
- page.locator('#settingsBack').click();page.locator('#menuPrintOptions').click();page.locator('#extraCopies').fill('3');page.locator('#sheetTitle').click();assert page.evaluate("state.copies===3&&sheetKind==='printOptions'")
- page.locator('#settingsBack').click();page.locator('#menuCoat').click();page.locator('[data-coat="grid"]').click();assert page.evaluate("sheetKind==='coat'")
+ page.locator('#settingsBack').click();assert page.locator('#copiesMinus').is_disabled();page.locator('#copiesPlus').click();page.locator('#copiesPlus').click();assert page.evaluate("state.copies===3&&sheetKind==='menu'")
+ assert page.locator('#artCredits,#menuPrintOptions').count()==0
+ assert page.locator('#menuWorkType').inner_text().strip()=='打印类型' and page.locator('#sharingMenu').inner_text()=='共享打印'
+ assert page.locator('#sheetBody .hint').count()==0
+ for _ in range(7):page.locator('#copiesPlus').click()
+ assert page.locator('#copiesPlus').is_disabled() and page.evaluate('state.copies')==10
+ for _ in range(9):page.locator('#copiesMinus').click()
+ assert page.locator('#copiesMinus').is_disabled() and page.evaluate('state.copies')==1
+ page.locator('#menuCoat').click();assert page.locator('[data-coat=""]').inner_text()=='高亮覆膜';assert 'selected' in page.locator('[data-coat=""]').get_attribute('class');page.locator('[data-coat="grid"]').click();assert page.evaluate("sheetKind==='coat'")
  assert not errors,errors
  ctx=browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True);mobile=ctx.new_page();mobile.route('https://studio.test/**',route);mobile.goto('https://studio.test/');mobile.wait_for_selector('#menuBtn');assert mobile.locator('#fullscreenBtn').count()==0
+ mobile.locator('#menuBtn').click();mobile.locator('#copiesPlus').click();assert mobile.evaluate("sheetKind==='menu'&&state.copies===2")
  assert mobile.evaluate('document.documentElement.scrollWidth<=innerWidth')
  print('PASS: large settings, persistent connection/paper/layout panels, live addresses, copies/coat changes, mobile standard browser layout')
  browser.close()

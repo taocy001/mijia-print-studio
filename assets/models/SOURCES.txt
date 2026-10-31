@@ -13,3 +13,14 @@ https://repo.maven.apache.org/maven2/com/microsoft/onnxruntime/onnxruntime-andro
 Licenses are included alongside this file. All inference runs on the device.
 Input: RGB, 320x320, CHW, image-max scaling and ImageNet normalization.
 Output: 1959, normalized foreground mask. Original JPEG is retained.
+
+Face detection: YuNet 2023mar (MIT), OpenCV Zoo
+https://github.com/opencv/opencv_zoo/tree/f12e12798e8314f7c074a6656816c048dcc95b7a/models/face_detection_yunet
+Model SHA256: 8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4
+Input: BGR float32, 1x3x640x640, no normalization; aspect-preserving resize, right/bottom zero padding.
+Outputs: cls/obj/bbox at strides 8, 16, 32. Score sqrt(cls*obj) >= 0.75; NMS IoU 0.3.
+Only face bounds are used; no identity recognition or remote inference.
+
+ONNX Runtime bundled notices (v1.23.2):
+https://raw.githubusercontent.com/microsoft/onnxruntime/v1.23.2/ThirdPartyNotices.txt
+SHA256: e9e90971a8e75a9a8ac0c6412e29c1202d079998389915aa485f46c816c3b4cc

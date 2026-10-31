@@ -1,0 +1,7 @@
+NASA portrait of astronaut Eileen Collins, public domain.
+Source: https://raw.githubusercontent.com/scikit-image/scikit-image/v0.25.2/skimage/data/astronaut.png
+Source SHA256: 88431cd9653ccd539741b555fb0a46b61558b301d4110412b5bc28b5e3ea6cb5
+Public-domain statement: https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut
+Original NASA photo: https://flic.kr/p/r9qvLn
+Converted from PNG to JPEG, quality 88; original dimensions retained.
+Used only for offline face-detection tests, not shipped as app artwork.

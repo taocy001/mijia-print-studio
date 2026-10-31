@@ -14,8 +14,18 @@
   bluetoothSettings:()=>emit('toast','请在提供服务的设备上打开蓝牙设置'),
   cutout:source=>{setTimeout(()=>request('cutout',{source}).then(v=>emit('cutout',{source,images:v.images})).catch(e=>emit('cutoutError',{source,message:e.message})),0);return '{"ok":true}';},
   printBatch:async payload=>{try{const pages=JSON.parse(payload);const key=pendingPrint.requestId||(pendingPrint.requestId=randomId());const result=await request('print',{requestId:key,pages});await refresh();return JSON.stringify(result);}catch(e){return JSON.stringify({error:e.message});}},
+  reprint:async payload=>{try{const result=await request('reprint',JSON.parse(payload));await refresh();return JSON.stringify(result);}catch(e){return JSON.stringify({error:e.message});}},
   reconcile:()=>action('reconcile'),cancel:()=>{if(confirm('取消自己的当前打印任务？'))action('cancel');},discardPrepared:()=>action('cancel'),resolveUnknown:()=>emit('toast','请在提供服务的设备上检查并处理未知任务')
  };
  function randomId(){const b=new Uint8Array(16);crypto.getRandomValues(b);return Array.from(b,x=>x.toString(16).padStart(2,'0')).join('');}
- window.BrowserTransport={request,refresh};refresh();setInterval(refresh,1200);
+ async function openQueue(){
+  if(!native.canManageQueue)return;
+  try{const value=await request('admin/queue');if(!native.canManageQueue)return;
+   const labels={queued:'等待打印',printing:'正在打印',uncertain:'待检查',done:'已完成',cancelled:'已取消',aborted:'未完成',rejected:'未接受'};
+   openSheet('hostQueue','本机打印队列','<button class="menu-row" id="queueBack">'+icon('chevron')+'<span>返回打印记录</span></button>'+ (value.jobs.length?value.jobs.map((j,i)=>`<div class="field"><strong>${esc(j.title||'打印任务')}</strong><p>${esc(labels[j.phase]||j.phase)} · ${esc(j.message||'')}</p>${j.phase==='uncertain'?`<button class="full-button secondary-button" data-query-job="${i}">查询打印机状态</button><button class="full-button secondary-button" data-resolve-job="${i}">已检查打印机，结束记录</button>`:''}</div>`).join(''):'<p class="hint">暂无打印任务</p>'));
+   $('queueBack').onclick=openHistory;
+   $('sheetBody').querySelectorAll('[data-query-job],[data-resolve-job]').forEach(button=>{button.onclick=async()=>{const resolve=button.hasAttribute('data-resolve-job'),job=value.jobs[+(resolve?button.dataset.resolveJob:button.dataset.queryJob)];if(resolve&&!confirm('确认已在打印机旁检查本次输出？此操作只结束未知记录，不会重新打印。'))return;button.disabled=true;try{await request(resolve?'admin/resolve':'admin/reconcile',{token:job.token,...(resolve?{confirmed:true}:{})});await refresh();if(sheetKind==='hostQueue')await openQueue();}catch(e){emit('toast',e.message);}finally{button.disabled=false;}};});
+  }catch(e){emit('toast',e.message);}
+ }
+ window.BrowserTransport={request,refresh,openQueue};refresh();setInterval(refresh,1200);
 })();

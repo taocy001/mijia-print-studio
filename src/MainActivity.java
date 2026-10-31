@@ -27,6 +27,7 @@ public final class MainActivity extends Activity {
     private int pickLimit=6;
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
+        try{Store.recover(this);}catch(Exception e){android.util.Log.w("LiuyingPrint","Recovery state could not be saved");}
         updateSystemTheme();
         web=new WebView(this);updateSystemTheme();
         android.widget.FrameLayout root=new android.widget.FrameLayout(this);root.setBackgroundColor((getResources().getConfiguration().uiMode & android.content.res.Configuration.UI_MODE_NIGHT_MASK)==android.content.res.Configuration.UI_MODE_NIGHT_YES?Color.rgb(17,18,20):Color.rgb(245,245,247));
@@ -88,7 +89,7 @@ public final class MainActivity extends Activity {
         if(!granted()){event("toast","请先连接打印机并允许附近设备权限");return;}
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},8);
-        try{startForegroundService(new Intent(this,PrintService.class).putExtra("action",action));}catch(RuntimeException e){event("toast","任务尚未启动，请回到 App 检查打印进度");}
+        try{startForegroundService(new Intent(this,PrintService.class).putExtra("action",action));}catch(RuntimeException e){try{JSONObject job=Store.read(this,"job.json");if("prepared".equals(job.optString("phase"))){job.put("phase","rejected").put("message","打印服务未能启动，照片尚未提交。请保持 App 在前台后重试");Store.write(this,"job.json",job);Store.archive(this,job);Store.messageFailure(this,job);PrintJobs.finish(this,job);}else Store.failure(this,"start-"+UUID.randomUUID(),"local","service","任务状态检查未能启动，请回到 App 检查原打印任务");}catch(Exception ignored){}event("toast","任务尚未启动，请查看打印记录");}
     }
     @Override public void onConfigurationChanged(android.content.res.Configuration configuration){
         super.onConfigurationChanged(configuration);
@@ -104,7 +105,7 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void resumeSharing(){SharingService.resumeQueue();}
         @JavascriptInterface public boolean landscape(){return getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE;}
 
-        @JavascriptInterface public String state(){try{return Store.state(MainActivity.this).put("permission",granted()).toString();}catch(Exception e){return "{}";}}
+        @JavascriptInterface public String state(){try{JSONObject state=Store.state(MainActivity.this),current=state.getJSONObject("job"),waiting=PrintJobs.state(MainActivity.this,"local").getJSONObject("job");if((!current.has("token")||Store.terminal(current))&&"queued".equals(waiting.optString("phase")))state.put("job",waiting).put("unresolved",true);JSONArray history=state.optJSONArray("history");if(history!=null)for(int i=0;i<history.length();i++)Reprints.decorate(MainActivity.this,"local",history.getJSONObject(i));return state.put("permission",granted()).toString();}catch(Exception e){return "{}";}}
         @JavascriptInterface public void release(){try{PrinterStatus.release(MainActivity.this);}catch(Exception e){event("toast",e.getMessage());}}
         @JavascriptInterface public void airprintLayout(boolean splice){try{PrinterStatus.layout(splice);}catch(Exception e){event("toast",e.getMessage());}}
         @JavascriptInterface public void connect(){main.post(()->check());}
@@ -150,15 +151,21 @@ public final class MainActivity extends Activity {
                     Store.write(MainActivity.this,"job.json",first);
                     main.post(()->service("print"));return new JSONObject().put("ok",true).toString();
                 }
+            }catch(Exception e){try{Store.failure(MainActivity.this,"local-"+UUID.randomUUID(),"local","preparing","尚未提交打印："+(e.getMessage()==null?"照片处理失败":e.getMessage()));return new JSONObject().put("error",e.getMessage()).toString();}catch(Exception ignored){return "{}";}}
+        }
+        @JavascriptInterface public String reprint(String payload){
+            try{if(!granted())throw new IOException("请先连接打印机");JSONObject request=new JSONObject(payload);synchronized(Store.LOCK){JSONObject result=Reprints.submit(MainActivity.this,"local",request.getString("token"),request.getString("requestId"),Boolean.TRUE.equals(request.opt("confirmed")),true);
+                if(result.optBoolean("startable")&&PrintJobs.promote(MainActivity.this))main.post(()->service("print"));return result.toString();}
             }catch(Exception e){try{return new JSONObject().put("error",e.getMessage()).toString();}catch(Exception ignored){return "{}";}}
         }
         @JavascriptInterface public void reconcile(){main.post(()->{if(!Store.busy)service("reconcile");});}
         @JavascriptInterface public void cancel(){main.post(()->{
+            try{JSONObject own=PrintJobs.state(MainActivity.this,"local").getJSONObject("job");if("queued".equals(own.optString("phase"))){new AlertDialog.Builder(MainActivity.this).setTitle("取消等待中的重印？").setNegativeButton("返回",null).setPositiveButton("取消任务",(d,w)->{try{PrintJobs.cancel(MainActivity.this,"local");}catch(Exception e){event("toast",e.getMessage());}}).show();return;}}catch(Exception ignored){}
             new AlertDialog.Builder(MainActivity.this).setTitle("取消当前打印任务？").setMessage("已开始的机械打印可能无法立即停止。")
                 .setNegativeButton("继续打印",null).setPositiveButton("取消任务",(d,w)->{if(Store.busy)Store.cancel=true;else service("cancel");}).show();
         });}
         @JavascriptInterface public void discardPrepared(){
-            synchronized(Store.LOCK){JSONObject job=Store.read(MainActivity.this,"job.json");if(!Store.busy&&"prepared".equals(job.optString("phase")))try{job.put("phase","cancelled");job.put("message","已取消尚未提交的任务");Store.write(MainActivity.this,"job.json",job);}catch(Exception ignored){}}
+            synchronized(Store.LOCK){JSONObject job=Store.read(MainActivity.this,"job.json");if(!Store.busy&&"prepared".equals(job.optString("phase")))try{job.put("phase","cancelled");job.put("message","已取消尚未提交的任务");Store.write(MainActivity.this,"job.json",job);Store.archive(MainActivity.this,job);PrintJobs.finish(MainActivity.this,job);}catch(Exception ignored){}}
         }
         @JavascriptInterface public void resolveUnknown(){main.post(()->{
             JSONObject current=Store.read(MainActivity.this,"job.json");
@@ -168,7 +175,7 @@ public final class MainActivity extends Activity {
                 .setNegativeButton("继续检查",null).setPositiveButton("已检查，结束记录",(d,w)->{
                     synchronized(Store.LOCK){JSONObject latest=Store.read(MainActivity.this,"job.json");
                         if(Store.busy||!current.optString("token").equals(latest.optString("token"))||latest.has("jobId"))return;
-                        try{latest.put("phase","aborted").put("message","手动结束结果未知的记录，未重新打印");Store.write(MainActivity.this,"job.json",latest);Store.archive(MainActivity.this,latest);}
+                        try{latest.put("phase","aborted").put("message","手动结束结果未知的记录，未重新打印");Store.write(MainActivity.this,"job.json",latest);Store.archive(MainActivity.this,latest);PrintJobs.finish(MainActivity.this,latest);}
                         catch(Exception e){event("toast","记录更新失败，请重试");}}
                 }).show();
         });}
@@ -190,7 +197,7 @@ public final class MainActivity extends Activity {
                     });
                     String name="photos/"+UUID.randomUUID()+".jpg";
                     try(FileOutputStream out=new FileOutputStream(new File(getFilesDir(),name))){bitmap.compress(Bitmap.CompressFormat.JPEG,97,out);}
-                    imported.put(new JSONObject().put("src","/private/"+name).put("width",bitmap.getWidth()).put("height",bitmap.getHeight()));bitmap.recycle();
+                    imported.put(new JSONObject().put("src","/private/"+name).put("width",bitmap.getWidth()).put("height",bitmap.getHeight()).put("faces",request==10?FaceDetector.json(FaceDetector.detect(MainActivity.this,bitmap)):new JSONArray()));bitmap.recycle();
                 }
             }catch(Exception e){event("toast","有照片未能读取，请尝试其他图片");android.util.Log.w("LiuyingUI","Import",e);}
             finally{event(request==11?"texture":"photos",imported);event("loading",false);}
