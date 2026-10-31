@@ -13,7 +13,7 @@ class Capabilities:
     @property
     def paper_mm(self):return (7620,7620) if self.media==5009 else (10160,15240)
     def printer_attributes(self):
-        accepting = not self.core.paused and (self.core.simulate or self.core.device.get('connected',False))
+        accepting = not self.core.paused and not self.core.released and self.media in (5009,5012,5014) and (self.core.simulate or self.core.device.get('connected',False))
         attrs = [A(4,0x42,"printer-name","小米照片打印机 2".encode("utf-8")),
             A(4,0x41,"printer-info","小米照片打印机 2".encode("utf-8")),
             A(4,0x45,"printer-uri-supported",self.uri.encode()),
@@ -67,7 +67,7 @@ class Capabilities:
         attrs.extend(A(4,0x21,k,integer(0)) for k in ('media-left-margin-supported','media-right-margin-supported','media-top-margin-supported','media-bottom-margin-supported'))
         attrs.append(A(4,0x34,"media-col-default",encode_collection(size)))
         attrs.append(A(4,0x34,"media-col-database",encode_collection(size)))
-        if not self.core.simulate and not self.core.device.get('connected'):
+        if not accepting:
             attrs=[a for a in attrs if a.name!='media-ready']
         return attrs
 

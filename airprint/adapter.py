@@ -13,6 +13,7 @@ TERMINAL=('done','cancelled','aborted','rejected')
 class AirPrint(Capabilities):
     def __init__(self,core,uri,*,paper='auto'):
         self.core,self.uri,self.paper=core,uri,paper
+        if paper=='splice':core.airprint_splice=True
         self.identity='urn:uuid:'+str(uuid.uuid5(uuid.NAMESPACE_URL,uri))
         self.started=time.monotonic();self.gate=asyncio.Lock()
         self.path=core.data/'airprint.json'
@@ -24,8 +25,8 @@ class AirPrint(Capabilities):
         self.save()
     @property
     def media(self):
-        if self.paper!='auto':return {'square':5009,'six':5012,'splice':5014}[self.paper]
-        return self.core.device.get('media',5012)
+        tray=self.core.device.get('media',0)
+        return 5014 if tray==5012 and self.core.airprint_splice else tray
     def save(self):atomic(self.path,self.rows)
     def job(self,row):return next((j for j in self.core.jobs if j['requestId']==row['key'] and j['owner']==row['owner']),None)
     def phase(self,row):return (self.job(row) or row)['phase']
@@ -93,7 +94,8 @@ class AirPrint(Capabilities):
                         if not req.document:raise IppFailure(0x0400,'empty document')
                         row.update(phase='rendering',documentKey=key);self.save()
                         try:
-                            if self.paper=='auto' and not self.core.io_lock.locked():await self.core.status()
+                            if not self.core.io_lock.locked():await self.core.status()
+                            if self.core.released or not self.core.device.get('connected'):raise IppFailure(0x0507,'printer unavailable')
                             if self.media not in (5009,5012,5014):raise IppFailure(0x040b,'unsupported loaded paper')
                             await self.render(req,row)
                         except Exception:

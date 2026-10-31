@@ -23,7 +23,7 @@ public final class MainActivity extends Activity {
     private WebView web;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final java.util.concurrent.atomic.AtomicBoolean cutting=new java.util.concurrent.atomic.AtomicBoolean();
-    private boolean picking,sharingLan;
+    private boolean picking,sharingLan,sharingAirPrint;
     private int pickLimit=6;
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
@@ -73,15 +73,16 @@ public final class MainActivity extends Activity {
     private boolean granted(){return checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED&&checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED;}
     private void check(){
         if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},7);return;}
-        synchronized(Store.LOCK){if(Store.busy)return;JSONObject job=Store.read(this,"job.json");if(job.has("token")&&!Store.terminal(job)){event("toast","请先在打印进度中处理当前任务");return;}Store.busy=true;Store.message="正在连接打印机…";}
-        new Thread(()->{try(Printer printer=new Printer(this)){Store.device=printer.status();Store.message="蓝牙已连接";}
-            catch(Exception e){Store.device=new JSONObject();Store.message="连接失败，请确认打印机开机，且米家未占用蓝牙";event("toast",Store.message);android.util.Log.w("LiuyingPrint","Status",e);}
-            finally{Store.busy=false;}},"liuying-status").start();
+        PrinterStatus.refresh(this,true);
     }
+    private final Runnable statusTick=new Runnable(){public void run(){if(granted())PrinterStatus.refresh(MainActivity.this,false);main.postDelayed(this,15000);}};
+    @Override protected void onResume(){super.onResume();main.removeCallbacks(statusTick);main.post(statusTick);}
+    @Override protected void onPause(){main.removeCallbacks(statusTick);super.onPause();}
+
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==9&&granted())startSharingService();if(request==7){if(granted())check();else event("toast","需要附近设备权限才能连接打印机");}}
     private void startSharingService(){
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},8);
-        try{startForegroundService(new Intent(this,SharingService.class).putExtra("lan",sharingLan));}catch(RuntimeException e){event("toast","请解锁手机并保持 App 在前台，再开启共享");}
+        try{startForegroundService(new Intent(this,SharingService.class).setAction(sharingAirPrint?"airprint":"web").putExtra("lan",sharingLan));}catch(RuntimeException e){event("toast","请解锁手机并保持 App 在前台，再开启共享");}
     }
     private void service(String action){
         if(!granted()){event("toast","请先连接打印机并允许附近设备权限");return;}
@@ -96,12 +97,16 @@ public final class MainActivity extends Activity {
     }
     private final class Bridge {
         @JavascriptInterface public String sharingState(){return SharingService.sharingState().toString();}
-        @JavascriptInterface public void startSharing(boolean lan){main.post(()->{sharingLan=lan;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
+        @JavascriptInterface public void startSharing(boolean lan){main.post(()->{sharingAirPrint=false;sharingLan=lan;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
+        @JavascriptInterface public void startAirPrint(){main.post(()->{sharingAirPrint=true;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
+        @JavascriptInterface public void stopAirPrint(){SharingService.stopAirPrint();}
         @JavascriptInterface public void stopSharing(){SharingService.stopSharing();}
         @JavascriptInterface public void resumeSharing(){SharingService.resumeQueue();}
         @JavascriptInterface public boolean landscape(){return getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE;}
 
         @JavascriptInterface public String state(){try{return Store.state(MainActivity.this).put("permission",granted()).toString();}catch(Exception e){return "{}";}}
+        @JavascriptInterface public void release(){try{PrinterStatus.release(MainActivity.this);}catch(Exception e){event("toast",e.getMessage());}}
+        @JavascriptInterface public void airprintLayout(boolean splice){try{PrinterStatus.layout(splice);}catch(Exception e){event("toast",e.getMessage());}}
         @JavascriptInterface public void connect(){main.post(()->check());}
         @JavascriptInterface public void bluetoothSettings(){main.post(()->startActivity(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS)));}
         @JavascriptInterface public void pick(int remaining){main.post(()->{

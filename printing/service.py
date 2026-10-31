@@ -16,7 +16,7 @@ def atomic(path,value):
 class PrintService:
     def __init__(self,data,simulate=False,address=None):
         self.data=Path(data);self.data.mkdir(parents=True,exist_ok=True,mode=0o700);self.simulate=simulate;self.address=address
-        self.device={};self.queue=asyncio.Queue();self.io_lock=asyncio.Lock();self.lock=asyncio.Lock();self.paused=False;self.cancel_flags={};self.device_printer=None
+        self.released=False;self.airprint_splice=False;self.device={};self.queue=asyncio.Queue();self.io_lock=asyncio.Lock();self.lock=asyncio.Lock();self.paused=False;self.cancel_flags={};self.device_printer=None
         self._locks=[]
         self._acquire(self.data/'service.lock')
         if not simulate:
@@ -47,12 +47,13 @@ class PrintService:
         printer,self.device_printer=self.device_printer,None
         if printer is not None:printer.close()
     async def start(self,app):
+        if self.simulate:await self.status()
         self.worker=asyncio.create_task(self.work())
         self.monitor=asyncio.create_task(self.monitor_status()) if not self.simulate else None
     async def monitor_status(self):
         failures=0
         while True:
-            if not self.io_lock.locked():
+            if not self.released and not self.io_lock.locked():
                 try:await self.status();failures=0
                 except Exception:failures=min(failures+1,4)
             await asyncio.sleep(min(120,15*2**(failures-1)) if failures else 60)
@@ -99,7 +100,18 @@ class PrintService:
             return 'done'
         except Exception:
             self.disconnect();raise
+    async def release(self):
+        async with self.lock:
+            if self.io_lock.locked() or any(j['phase'] not in ('done','cancelled','aborted','rejected') for j in self.jobs):raise UserError('请等待打印或状态读取结束，再释放蓝牙')
+            self.released=True
+            async with self.io_lock:await asyncio.to_thread(self.disconnect)
+            self.device={**self.device,'connected':False,'released':True,'checkedAt':int(time.time()*1000)}
+    async def connect(self):
+        self.released=False
+        self.device={**self.device,'released':False}
+        await self.status()
     async def status(self):
+        if self.released:return
         if self.simulate:self.device={'connected':True,'state':'30','alert':'::0','ribbon':-1,'media':5012,'checkedAt':int(time.time()*1000)};return
         if self.io_lock.locked():return
         async with self.io_lock:
@@ -124,6 +136,7 @@ class PrintService:
         if not isinstance(key,str) or not re.fullmatch('[A-Za-z0-9-]{16,80}',key) or not isinstance(pages,list) or not 1<=len(pages)<=6:raise UserError('打印参数无效')
         digest=hashlib.sha256(json.dumps(pages,sort_keys=True).encode()).hexdigest()
         async with self.lock:
+            if self.released:raise UserError('蓝牙已释放，请先连接此设备')
             for job in self.jobs:
                 if job['owner']==session['id'] and job['requestId']==key:
                     if job['digest']!=digest:raise UserError('请求内容已变化，请重新预览')

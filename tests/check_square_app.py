@@ -8,7 +8,7 @@ root=Path(__file__).resolve().parents[1];assets=root/'assets'
 with sync_playwright() as p:
  b=p.chromium.launch();page=b.new_page(viewport={'width':411,'height':828},is_mobile=True,has_touch=True);errors=[]
  page.on('pageerror',lambda e:errors.append(str(e)))
- page.add_init_script("window.Studio={state:()=>JSON.stringify({permission:true,device:{connected:true,media:5009},history:[]}),printBatch:()=>{throw Error('Printing is forbidden in tests')}}")
+ page.add_init_script("window.Studio={state:()=>JSON.stringify({permission:true,device:{connected:true,checkedAt:Date.now(),media:5009},history:[]}),printBatch:()=>{throw Error('Printing is forbidden in tests')}}")
  def route(r):
   path=unquote(urlparse(r.request.url).path);file=assets/(path.lstrip('/') or 'index.html')
   if path.startswith('/private/'):
