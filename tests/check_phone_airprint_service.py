@@ -30,12 +30,12 @@ try:
     assert name in out,'Phone not discovered: '+service
    assert not page.evaluate('JSON.parse(Studio.sharingState()).airprintError')
    print('PASS: Mac discovers phone AirPrint; IPP reports unavailable until Bluetooth detection',flush=True)
-   page.evaluate('Studio.startSharing(true)');page.wait_for_function('JSON.parse(Studio.sharingState()).running')
+   page.evaluate('Studio.startSharing()');page.wait_for_function('JSON.parse(Studio.sharingState()).running')
    info=page.evaluate('JSON.parse(Studio.sharingState())');url=info['addresses'][0];assert urllib.request.urlopen(url,timeout=5).status==200
    ipp_url=url.rsplit(':',1)[0]+':8637/ipp/print';assert attrs(ipp_url).code==0
    run('shell','input','keyevent','3');assert attrs(ipp_url).code==0
    page.evaluate('Studio.stopSharing()');page.wait_for_function('!JSON.parse(Studio.sharingState()).running');assert page.evaluate('JSON.parse(Studio.sharingState()).airprint');assert attrs(ipp_url).code==0
-   page.evaluate('Studio.startSharing(false)');page.wait_for_function('JSON.parse(Studio.sharingState()).running');page.evaluate('Studio.stopAirPrint()');page.wait_for_function('!JSON.parse(Studio.sharingState()).airprint');assert page.evaluate('JSON.parse(Studio.sharingState()).running')
+   page.evaluate('Studio.startSharing()');page.wait_for_function('JSON.parse(Studio.sharingState()).running');page.evaluate('Studio.stopAirPrint()');page.wait_for_function('!JSON.parse(Studio.sharingState()).airprint');assert page.evaluate('JSON.parse(Studio.sharingState()).running')
    assert urllib.request.urlopen(urllib.request.Request('http://127.0.0.1:'+web,headers={'Host':'127.0.0.1:8634'}),timeout=5).status==200
    print('PASS: Wi-Fi HTTP and IPP, background operation, independent Web/AirPrint start and stop',flush=True)
   finally:

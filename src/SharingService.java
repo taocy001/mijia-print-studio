@@ -9,12 +9,12 @@ import org.json.*;
 
 public final class SharingService extends PrintService {
  private static volatile SharingService instance;
- private PhoneAirPrint ippApi;private LocalHttp http,ipp;private NsdManager.RegistrationListener registration;private volatile String airprintName="留影工坊 · 手机",airprintError="";private WebApi api;private boolean lan;private volatile boolean closing,running,paused;
+ private PhoneAirPrint ippApi;private LocalHttp http,ipp;private NsdManager.RegistrationListener registration;private volatile String airprintName="留影工坊 · 手机",airprintError="";private WebApi api;private volatile boolean closing,running,paused;
  private final Handler main=new Handler(Looper.getMainLooper());
  static boolean accepting(){SharingService s=instance;return s!=null&&!s.closing&&s.http!=null;}
  static JSONObject sharingState(){
-  JSONObject out=new JSONObject();try{SharingService s=instance;out.put("running",accepting());if(s==null)return out;out.put("airprint",s.ipp!=null).put("airprintName",s.airprintName).put("airprintError",s.airprintError).put("paused",s.paused).put("lan",s.lan);if(s.http==null)return out;out.put("code",s.api.sessions.code).put("local","http://127.0.0.1:"+s.http.port());JSONArray addresses=new JSONArray();
-   if(s.lan)for(NetworkInterface n:Collections.list(NetworkInterface.getNetworkInterfaces()))if(n.isUp()&&!n.isLoopback())for(InetAddress a:Collections.list(n.getInetAddresses()))if(a instanceof Inet4Address&&a.isSiteLocalAddress())addresses.put("http://"+a.getHostAddress()+":"+s.http.port());out.put("addresses",addresses);
+  JSONObject out=new JSONObject();try{SharingService s=instance;out.put("running",accepting());if(s==null)return out;out.put("airprint",s.ipp!=null).put("airprintName",s.airprintName).put("airprintError",s.airprintError).put("paused",s.paused).put("lan",true);if(s.http==null)return out;out.put("code",s.api.sessions.code);JSONArray addresses=new JSONArray();
+   for(NetworkInterface n:Collections.list(NetworkInterface.getNetworkInterfaces()))if(n.isUp()&&!n.isLoopback())for(InetAddress a:Collections.list(n.getInetAddresses()))if(a instanceof Inet4Address&&a.isSiteLocalAddress())addresses.put("http://"+a.getHostAddress()+":"+s.http.port());out.put("addresses",addresses);
   }catch(Exception ignored){}return out;
  }
  @Override protected int notificationId(){return 2;}
@@ -31,7 +31,7 @@ public final class SharingService extends PrintService {
   try{
    if(instance==null){PrintJobs.cancelWaiting(this);instance=this;main.post(pump);}
    if("airprint".equals(intent.getAction())){if(ipp==null){ippApi=new PhoneAirPrint(this);ipp=new LocalHttp(true,8637,ippApi,true);announce();}}
-   else if(http==null){lan=intent.getBooleanExtra("lan",false);api=new WebApi(this);http=new LocalHttp(lan,8634,api);}
+   else if(http==null){api=new WebApi(this);http=new LocalHttp(true,8634,api);}
   }catch(Exception e){Store.message="共享服务启动失败，请检查端口或权限";if(http==null&&ipp==null){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();}}
   return START_NOT_STICKY;
  }

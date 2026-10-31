@@ -15,3 +15,5 @@ body.layer-editing .dock{display:none}body.layer-editing .app{padding-bottom:60v
 .crop-editing .dock{display:none}.crop-editing .app{padding-bottom:24px}#cropNotice{border-top:1px solid #d6dfcc}
 /* One canvas, no crop mode. The narrow surround reveals excluded original pixels. */
 #paperStage:after{display:none}.has-work .board #preview{touch-action:pan-y;cursor:grab}.canvas-guide{margin:0;padding:8px 16px 0;font-size:11px;color:#647568}.preview-meta{align-items:flex-start}.preview-meta #gestureHint{max-width:65%;text-align:right}.decoration-actions button{flex:1}.has-work .board{background:#5d6660}
+
+.crop-frame-edge{position:absolute;z-index:1;touch-action:none;user-select:none;cursor:move}
