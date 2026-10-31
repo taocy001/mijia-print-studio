@@ -22,6 +22,7 @@ final class WebApi implements LocalHttp.Handler {
   WebSessions.Session s=sessions.find(r.headers.get("cookie"));
   if(s==null){if(r.path.equals("/")&&r.method.equals("GET"))return LocalHttp.Response.text(200,"text/html; charset=utf-8",pairPage("输入手机 App 中显示的配对码"));return json(401,new JSONObject().put("error","请重新配对"));}
   if(r.method.equals("GET")){
+   if(r.path.equals("/api/sharing")){JSONObject state=SharingService.sharingState();state.remove("code");state.put("current","http://"+r.host).put("host","android");return json(200,state);}
    if(r.path.equals("/api/state")){JSONObject state=PrintJobs.state(context,s.id);if(SharingService.sharingState().optBoolean("paused")&&"queued".equals(state.getJSONObject("job").optString("phase")))state.getJSONObject("job").put("message","共享队列已暂停，请在手机上检查");synchronized(s){JSONObject job=state.optJSONObject("job");if(job!=null&&job.has("file"))s.files.add("/private/"+job.getString("file"));JSONArray history=state.optJSONArray("history");if(history!=null)for(int i=0;i<history.length();i++)s.files.add("/private/"+history.getJSONObject(i).getString("file"));}return json(200,state);}
    if(r.path.equals("/session.js"))return LocalHttp.Response.text(200,"application/javascript","window.STUDIO_DRAFT_KEY="+JSONObject.quote("liuying-draft-"+s.id)+";");
    if(r.path.startsWith("/private/")){

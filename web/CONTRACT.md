@@ -6,12 +6,13 @@ Android WebView 使用 `Studio` 原生桥；普通浏览器由 `browser.js` 适�
 
 ## HTTP
 
-Android App 内主动开启共享，默认仅监听本机；同一 Wi-Fi 共享需单独选择。
+Android App 内主动开启同一 Wi-Fi 共享，本机直接使用 App。
 端口 8634。浏览器先输入手机显示的配对码，服务设置 HttpOnly、SameSite=Strict 会话 Cookie。
 所有 POST 必须携带与 Host 一致的 Origin；服务器仅接受自身监听地址作为 Host。
 这是局域网 HTTP，照片传输未加密，只适用于可信家庭网络；不做公网映射。
 
 - `POST /api/pair`：表单 `code`，成功后转到编辑器。
+- `GET /api/sharing`：已配对客户端读取共享 HTTP 地址及 AirPrint 状态，不返回配对码。
 - `GET /api/state`：当前会话任务、历史和设备状态，不暴露其他浏览器照片。
 - `POST /api/upload`：原始图片二进制，最多 25 MB；返回 `{src,width,height}`。Android 转为 JPEG 并限制长边 2400。
 - `POST /api/cutout`：`{source}`，返回 `{images:{white,blue,red}}`。

@@ -6,7 +6,7 @@
  const emit=(type,value)=>window.nativeEvent?.({type,value});
  async function request(path,data,raw=false){const options=data===undefined?{}:{method:'POST',headers:{'Content-Type':raw?'application/octet-stream':'application/json'},body:raw?data:JSON.stringify(data)};const r=await fetch('/api/'+path,{...options,credentials:'same-origin'});if(r.status===401){location.reload();throw Error('请重新配对');}const value=await r.json();if(!r.ok||value.error)throw Error(value.error||'共享服务请求失败');return value;}
  async function refresh(){if(refreshing)return;refreshing=true;try{cached=await request('state');}catch(e){cached={...cached,device:{...cached.device,connected:false},busy:true,message:'共享服务已断开，请检查提供服务的设备'};}finally{refreshing=false;}}
- function action(name){request(name,{}).then(refresh).catch(e=>emit('toast',e.message));}
+ function action(name){return request(name,{}).then(refresh).catch(e=>emit('toast',e.message));}
  function pick(limit,texture=false){const input=document.createElement('input');input.type='file';input.accept='image/*';input.multiple=!texture&&limit>1;input.onchange=async()=>{if(input.files.length>limit){emit('toast','本次最多选择 '+limit+' 张照片');return;}emit('loading',true);const items=[];try{for(const file of input.files){if(file.size>25*1024*1024)throw Error('单张照片不能超过 25 MB');items.push(await request('upload',file,true));}}catch(e){emit('toast',e.message);}finally{emit(texture?'texture':'photos',items);emit('loading',false);}};input.click();}
  window.Studio={
   state:()=>JSON.stringify(cached),landscape:()=>innerWidth>innerHeight&&innerWidth<1000,
