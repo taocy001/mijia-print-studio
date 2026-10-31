@@ -22,7 +22,7 @@ class BluetoothPrinter:
         state_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         key = hashlib.sha256(self.client.address.encode()).hexdigest()[:24]
         self.intent = state_dir / (key + '.json')
-        self.client.open(lock_timeout=0 if status_only else 5, attempts=1 if status_only else 2)
+        self.client.open(lock_timeout=0 if status_only else 5, attempts=2)
 
     def close(self):
         self.client.close()

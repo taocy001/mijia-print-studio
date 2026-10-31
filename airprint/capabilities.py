@@ -13,7 +13,7 @@ class Capabilities:
     @property
     def paper_mm(self):return (7620,7620) if self.media==5009 else (10160,15240)
     def printer_attributes(self):
-        accepting = not self.core.paused
+        accepting = not self.core.paused and (self.core.simulate or self.core.device.get('connected',False))
         attrs = [A(4,0x42,"printer-name","小米照片打印机 2".encode("utf-8")),
             A(4,0x41,"printer-info","小米照片打印机 2".encode("utf-8")),
             A(4,0x45,"printer-uri-supported",self.uri.encode()),
@@ -22,7 +22,7 @@ class Capabilities:
             A(4,0x44,"uri-authentication-supported",b"none"),
             A(4,0x22,"printer-is-accepting-jobs",bytes([bool(accepting)])),
             A(4,0x23,"printer-state",integer(3 if accepting else 5)),
-            A(4,0x41,"printer-state-message",('Paused' if self.core.paused else 'Ready').encode()[:512]),
+            A(4,0x41,"printer-state-message",('Ready' if accepting else 'Printer unavailable; checking connection').encode()[:512]),
             A(4,0x44,"printer-state-reasons",b"none" if accepting else b"paused"),
             A(4,0x42,"printer-make-and-model",b"Mijia Instant Photo Printer 2 (experimental bridge)"),
             A(4,0x47,"charset-configured",b"utf-8"),
@@ -67,6 +67,8 @@ class Capabilities:
         attrs.extend(A(4,0x21,k,integer(0)) for k in ('media-left-margin-supported','media-right-margin-supported','media-top-margin-supported','media-bottom-margin-supported'))
         attrs.append(A(4,0x34,"media-col-default",encode_collection(size)))
         attrs.append(A(4,0x34,"media-col-database",encode_collection(size)))
+        if not self.core.simulate and not self.core.device.get('connected'):
+            attrs=[a for a in attrs if a.name!='media-ready']
         return attrs
 
     def _one(self, req, name, default=None):
