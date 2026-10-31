@@ -35,7 +35,18 @@ class TransportTests(unittest.TestCase):
             with self.assertRaises(ValueError):connect(address,channel,factory)
         factory.assert_not_called()
     def test_bidirectional_bytes_and_clean_close(self):
-        left,right=socket.socketpair();output=io.StringIO();source=io.StringIO('00017eff\nCLOSE\n')
+        received=threading.Event()
+        class Output(io.StringIO):
+            def write(self,value):
+                result=super().write(value)
+                if value.startswith('DATA '):received.set()
+                return result
+        class Input(io.StringIO):
+            def readline(self,size=-1):
+                value=super().readline(size)
+                if value=='CLOSE\n' and not received.wait(2):raise TimeoutError('Missing received bytes')
+                return value
+        left,right=socket.socketpair();output=Output();source=Input('00017eff\nCLOSE\n')
         right.sendall(bytes([0,126,255]));serve(left,source,output)
         self.assertEqual(right.recv(10),bytes([0,1,126,255]));right.close()
         lines=output.getvalue().splitlines();self.assertEqual(lines[0],'READY');self.assertIn('SENT',lines)
@@ -95,4 +106,3 @@ class ImageTests(unittest.TestCase):
         self.assertGreater(blue[2],200);self.assertLess(blue[0],40)
 
 if __name__=='__main__':unittest.main()
-
