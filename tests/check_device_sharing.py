@@ -20,7 +20,7 @@ with sync_playwright() as p:
  app.wait_for_function('window.Studio&&window.TemplateStudio')
  assert not app.evaluate('JSON.parse(Studio.state()).unresolved'),'Finish or resolve existing jobs before testing'
  assert not app.evaluate('JSON.parse(Studio.sharingState()).running'),'Stop sharing before testing'
- app.evaluate('Studio.startSharing(false)')
+ app.evaluate('Studio.startSharing()')
  app.wait_for_function('JSON.parse(Studio.sharingState()).running')
  info=app.evaluate('JSON.parse(Studio.sharingState())')
  browser=p.chromium.launch();ctx=browser.new_context(bypass_csp=True,viewport={'width':411,'height':828});page=ctx.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
