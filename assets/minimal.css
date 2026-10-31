@@ -94,3 +94,11 @@ body:not(.landscape):not(.has-work) .board{width:100%;flex:1;display:flex}
 body:not(.landscape) .empty{flex:1;min-height:0;padding:24px 18px;background:var(--bg)}
 
 .has-work .board #preview.photo-draggable{touch-action:none}
+
+#sheet>header{display:flex;align-items:center;gap:10px}#sheet>header>div{flex:1;min-width:0}
+#settingsBack{width:40px;min-width:40px;min-height:40px;border-radius:12px;background:var(--sage);font-size:28px;line-height:1;touch-action:manipulation}
+body:not(.landscape) #layerTools{position:fixed;z-index:9;left:8px;right:8px;bottom:calc(var(--browser-dock-height,62px) + 80px);padding:4px 8px;border:1px solid var(--line);border-radius:14px;background:var(--paper);box-shadow:0 4px 20px #0003;gap:4px;flex-wrap:wrap}
+body:not(.landscape) #layerTools #layerName{display:none}
+body:not(.landscape) #layerTools button{flex:1;padding:0 6px;white-space:nowrap}
+body:not(.landscape).has-work.layer-editing .app{padding-bottom:0}
+body.layer-editing #layerTools{display:none}

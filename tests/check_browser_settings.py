@@ -28,7 +28,7 @@ with sync_playwright() as p:
  page.locator('#connectNow').click();page.wait_for_function('native.device.connected')
  assert page.evaluate("sheetKind==='device'&&!$('sheet').hidden")
  page.locator('#changePaper').click();page.locator('[data-paper="5014"]').click();assert page.evaluate("sheetKind==='paper'&&state.media===5014")
- page.locator('#settingsBack').click();page.locator('#sharingMenu').click();page.wait_for_selector('#shareAddress0');assert page.locator('#shareAddress0').input_value()==shared['addresses'][0]
+ page.locator('#settingsBack').click();assert page.evaluate("sheetKind==='device'");page.locator('#settingsBack').click();page.locator('#sharingMenu').click();page.wait_for_selector('#shareAddress0');assert page.locator('#shareAddress0').input_value()==shared['addresses'][0]
  shared['addresses']=['http://192.168.1.26:8633'];page.wait_for_function("$('shareAddress0')?.value==='http://192.168.1.26:8633'")
  assert page.evaluate("sheetKind==='sharing'&&!$('sheet').hidden")
  page.screenshot(path='/tmp/liuying-settings-addresses.png')
