@@ -40,8 +40,21 @@ class PrintService:
     def printer(self,status=False):
         from .bluetooth_printer import BluetoothPrinter
         return BluetoothPrinter(self.address,ROOT/'build/desktop-bluetooth.app/Contents/MacOS/transport',os.environ.get('MIJIA_RFCOMM_CHANNEL','1'),self.data/'bluetooth-state',status_only=status)
-    async def start(self,app):self.worker=asyncio.create_task(self.work())
+    async def start(self,app):
+        self.worker=asyncio.create_task(self.work())
+        self.monitor=asyncio.create_task(self.monitor_status()) if not self.simulate else None
+    async def monitor_status(self):
+        failures=0
+        while True:
+            if not self.io_lock.locked():
+                try:await self.status();failures=0
+                except Exception:failures=min(failures+1,4)
+            await asyncio.sleep(min(120,15*2**(failures-1)) if failures else 60)
     async def stop(self,app):
+        if getattr(self,'monitor',None):
+            self.monitor.cancel()
+            try:await self.monitor
+            except asyncio.CancelledError:pass
         for job in self.jobs:
             if job['phase']=='queued':job.update(phase='cancelled',message='服务停止，尚未开始的任务已取消')
         self.save()
@@ -81,13 +94,22 @@ class PrintService:
         finally:printer.close()
     async def status(self):
         if self.simulate:self.device={'connected':True,'state':'30','alert':'::0','ribbon':-1,'media':5012,'checkedAt':int(time.time()*1000)};return
+        if self.io_lock.locked():return
         async with self.io_lock:
             def read():
                 p=self.printer(True)
                 try:
                     v=p.get_prop('printer-state','printer-state-alerts','media-size','ribbon-info');return dict(connected=True,state=str(v[0]),alert=v[1],media=v[2]['media-size'],ribbon=v[3].get('ribbon-info',[0,0,-1])[2],checkedAt=int(time.time()*1000))
                 finally:p.close()
-            self.device=await asyncio.to_thread(read)
+            task=asyncio.create_task(asyncio.to_thread(read))
+            try:self.device=await asyncio.shield(task)
+            except asyncio.CancelledError:
+                try:await task
+                except Exception:pass
+                raise
+            except Exception as error:
+                self.device={**self.device,'connected':False,'checkedAt':int(time.time()*1000),'error':'蓝牙暂不可用，稍后自动重连'}
+                raise UserError(self.device['error']) from error
     def public(self,job):return {k:v for k,v in job.items() if k in ('token','phase','message','progress','file','media','copies','title','orientation','createdAt','batchCount','batchIndex','jobId')}
     async def submit(self,session,body):
         key=body['requestId'];pages=body['pages']

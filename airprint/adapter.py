@@ -87,7 +87,7 @@ class AirPrint(Capabilities):
                         row=next((r for r in self.rows if r['key']==key),None)
                         if row:return encode_ipp(Message(req.version,0,req.request_id,opattrs+self.attributes(row)))
                         self._validate(req)
-                        if self.core.paused:raise IppFailure(0x0507,'printer paused; inspect unresolved job')
+                        if self.core.paused or not (self.core.simulate or self.core.device.get('connected')):raise IppFailure(0x0507,'printer paused; inspect unresolved job')
                         row=self.create(req,key,client)
                     if req.code!=5:
                         if not req.document:raise IppFailure(0x0400,'empty document')
