@@ -8,6 +8,7 @@ from io import BytesIO
 import os
 import struct
 from PIL import Image, ImageOps, ImageCms
+from printing.faces import frame_photo
 
 CANVAS = (1216, 1824)
 TARGET_BYTES = 512 * 1024
@@ -56,7 +57,7 @@ def prepare_jpeg(data: bytes, *, scaling="fill", rotate_180=False, centering=(0.
         raise Unsupported("only fill and fit are implemented")
     image = load_jpeg_pil(data)
     return prepare_rgb(image.tobytes(), image.width, image.height,
-                       scaling=scaling, rotate_180=rotate_180, centering=centering, orientation=orientation)
+                       scaling=scaling, rotate_180=rotate_180, centering=centering, orientation=orientation, face_aware=True)
 
 
 def best_photo_orientation(width,height):
@@ -67,7 +68,7 @@ def best_photo_orientation(width,height):
     return 4 if turned>normal+1e-12 else 3
 
 
-def prepare_rgb(pixels: bytes, width: int, height: int, *, scaling="fill", rotate_180=False, centering=(0.5,0.5), orientation=None):
+def prepare_rgb(pixels: bytes, width: int, height: int, *, scaling="fill", rotate_180=False, centering=(0.5,0.5), orientation=None, face_aware=False):
     if scaling not in ("fill", "fit"):
         raise Unsupported("only fill and fit are implemented")
     if width < 1 or height < 1 or width*height > 40_000_000 or len(pixels) != width*height*3:
@@ -79,12 +80,7 @@ def prepare_rgb(pixels: bytes, width: int, height: int, *, scaling="fill", rotat
     canvas=CANVAS
     landscape=orientation in (4,5) or orientation is None and best_photo_orientation(width,height)==4
     if landscape:canvas=CANVAS[::-1]
-    if scaling == "fill":
-        image = ImageOps.fit(image, canvas, Image.Resampling.LANCZOS, centering=centering)
-    else:
-        inner = ImageOps.contain(image, canvas, Image.Resampling.LANCZOS)
-        image = Image.new("RGB", canvas, "white")
-        image.paste(inner, ((canvas[0]-inner.width)//2, (canvas[1]-inner.height)//2))
+    image = frame_photo(image, canvas, scaling=scaling, centering=centering, face_aware=face_aware)
     if landscape:image=image.transpose(Image.Transpose.ROTATE_90)
     if rotate_180 or orientation in (5,6):
         image = image.transpose(Image.Transpose.ROTATE_180)
@@ -134,13 +130,8 @@ def compose_splice(images, *, scaling="fill") -> PreparedImage:
     halves = []
     for im in images[:2]:
         im = im.convert("RGB")
-        if scaling == "fill":
-            halves.append(ImageOps.fit(im, (hw, hh), Image.Resampling.LANCZOS))
-        else:
-            inner = ImageOps.contain(im, (hw, hh), Image.Resampling.LANCZOS)
-            frame = Image.new("RGB", (hw, hh), "white")
-            frame.paste(inner, ((hw - inner.width) // 2, (hh - inner.height) // 2))
-            halves.append(frame)
+        photo = im.info.get('studio_photo', True)
+        halves.append(frame_photo(im, (hw, hh), scaling=scaling if photo else 'fit', face_aware=photo))
     if len(halves) == 1:
         halves = halves * 2
     canvas = Image.new("RGB", CANVAS, "white")

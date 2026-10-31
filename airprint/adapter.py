@@ -25,7 +25,7 @@ class AirPrint(Capabilities):
         self.save()
     @property
     def media(self):
-        tray=self.core.device.get('media',0)
+        tray=self.core.available_media()
         return 5014 if tray==5012 and self.core.airprint_splice else tray
     def save(self):atomic(self.path,self.rows)
     def job(self,row):return next((j for j in self.core.jobs if j['requestId']==row['key'] and j['owner']==row['owner']),None)
@@ -88,14 +88,14 @@ class AirPrint(Capabilities):
                         row=next((r for r in self.rows if r['key']==key),None)
                         if row:return encode_ipp(Message(req.version,0,req.request_id,opattrs+self.attributes(row)))
                         self._validate(req)
-                        if self.core.paused or not (self.core.simulate or self.core.device.get('connected')):raise IppFailure(0x0507,'printer paused; inspect unresolved job')
+                        if not self.core.airprint_ready():raise IppFailure(0x0507,'printer paused; inspect unresolved job')
                         row=self.create(req,key,client)
                     if req.code!=5:
                         if not req.document:raise IppFailure(0x0400,'empty document')
                         row.update(phase='rendering',documentKey=key);self.save()
                         try:
                             if not self.core.io_lock.locked():await self.core.status()
-                            if self.core.released or not self.core.device.get('connected'):raise IppFailure(0x0507,'printer unavailable')
+                            if not self.core.airprint_ready():raise IppFailure(0x0507,'printer unavailable')
                             if self.media not in (5009,5012,5014):raise IppFailure(0x040b,'unsupported loaded paper')
                             await self.render(req,row)
                         except Exception:

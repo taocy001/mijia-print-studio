@@ -1,5 +1,5 @@
 """Offline integration tests. All jobs use synthetic documents and simulation."""
-import asyncio,base64,io,json,os,struct,subprocess,sys,tempfile,unittest
+import asyncio,base64,io,json,os,struct,subprocess,sys,tempfile,time,unittest
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -90,7 +90,7 @@ class Integration(unittest.IsolatedAsyncioTestCase):
     async def test_renderer_formats_and_all_papers(self):
         for paper,media,size in [('six',5012,(1216,1824)),('square',5009,(1040,1040)),('splice',5014,(1216,1824))]:
             self.core.airprint_splice=paper=='splice'
-            async def status(media=media):self.core.device={'connected':True,'media':5012 if media==5014 else media}
+            async def status(media=media):self.core.device={'connected':True,'media':5012 if media==5014 else media,'checkedAt':int(time.time()*1000),'alert':'::0','state':'30'}
             self.core.status=status
             await status()
             result=await self.call(request(2,media,photo((640,320))))
@@ -98,7 +98,7 @@ class Integration(unittest.IsolatedAsyncioTestCase):
             job=self.core.jobs[-1];self.assertEqual(job['media'],media)
             with Image.open(self.core.data/job['file']) as image:self.assertEqual(image.size,size)
         self.core.airprint_splice=False
-        async def status():self.core.device={'connected':True,'media':5012}
+        async def status():self.core.device={'connected':True,'media':5012,'checkedAt':int(time.time()*1000),'alert':'::0','state':'30'}
         self.core.status=status
         await status()
         for index,mime in enumerate(('image/urf','image/pwg-raster')):

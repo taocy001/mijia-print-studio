@@ -19,4 +19,7 @@ assert (assets/'licenses/Project-MIT.txt').read_bytes()==(root/'LICENSE').read_b
 assert (assets/'licenses/THIRD_PARTY.md').read_bytes()==(root/'THIRD_PARTY.md').read_bytes()
 for p in [*assets.glob('*.js'),*root.glob('src/*.java'),root/'AndroidManifest.xml']:
  s=p.read_text();assert not re.search(r'/Users/|local\.tao\.|syrup_6|portrait-Size6Inch|wide-.*_ota|(?:[A-F0-9]{2}:){5}[A-F0-9]{2}',s),p
+
+notices=assets/'models/ONNXRuntime-ThirdPartyNotices.txt'
+assert notices.is_file() and notices.stat().st_size>1000,notices
 print('PASS: provenance hashes, SVG safety, complete emoji catalog, bundled licenses, removed legacy assets and personal identifiers')

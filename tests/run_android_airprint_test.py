@@ -19,7 +19,11 @@ adb=SDK/'platform-tools/adb'
 services=subprocess.check_output([str(adb),'shell','dumpsys','activity','services','local.liuying.studio'],text=True)
 if 'isForeground=true' in services:raise SystemExit('Stop sharing and finish printing before device tests')
 for ext in ('urf','pwg'):run(adb,'push',root/f'tests/fixtures/airprint/one-page.{ext}',f'/data/local/tmp/liuying-one-page.{ext}')
+cups=Path(os.environ.get('STUDIO_CUPS_PDF','/tmp/mijia-cups-dryrun/document.bin'))
+cups_args=[]
+if cups.is_file():
+ run(adb,'push',cups,'/data/local/tmp/liuying-cups.pdf');cups_args=['-e','cupsPdf','true']
 run(adb,'install','--no-incremental','-r',out/'tests.apk')
-result=subprocess.run([str(adb),'shell','am','instrument','-w','local.liuying.studio.tests/local.liuying.studio.AirPrintInstrument'],capture_output=True,text=True)
+result=subprocess.run([str(adb),'shell','am','instrument','-w',*cups_args,'local.liuying.studio.tests/local.liuying.studio.AirPrintInstrument'],capture_output=True,text=True)
 print(result.stdout);print(result.stderr)
 if result.returncode or 'PASS:' not in result.stdout:raise SystemExit('Android queue tests failed')

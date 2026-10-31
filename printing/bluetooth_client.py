@@ -53,7 +53,8 @@ class BluetoothClient:
                     logging.getLogger(__name__).warning('Bluetooth reconnect before job creation: phase=%s channel=%s', self.phase, self.channel)
                     time.sleep(.3)
         except Exception:
-            self.close()
+            try:self.close()
+            except Exception:logging.getLogger(__name__).warning('Bluetooth setup cleanup failed')
             raise
 
     def __enter__(self):
@@ -130,24 +131,39 @@ class BluetoothClient:
         return answer['result']
     def upload(self,job,data):
         self.phase = 'photo upload'
-        if not data or len(data) > 1048576: raise ValueError('JPEG must be 1..1048576 bytes')
+        if not data or len(data) > 2097152: raise ValueError('Print stream must be 1..2097152 bytes')
         total=(len(data)+987)//988
         for i,offset in enumerate(range(0,len(data),988),1):
             self.send(frame(4,6,2,self.seq,crypt(self.key,struct.pack('<I',job)+data[offset:offset+988]),total,i));self.seq+=1
             if i%3==0:time.sleep(.015)
     def _close_transport(self):
-        if self.p is not None:
-            try:
-                self.p.stdin.write('CLOSE\n'); self.p.stdin.flush(); self.p.wait(timeout=3)
-            except Exception:
-                self.p.kill(); self.p.wait()
-            finally:
-                self.p.stdin.close(); self.p.stdout.close(); self.p = None
+        process,self.p=self.p,None
+        if process is None:return
+        error=None
+        try:
+            if process.poll() is None:
+                try:
+                    process.stdin.write('CLOSE\n');process.stdin.flush();process.wait(timeout=3)
+                except Exception:
+                    try:process.kill()
+                    except ProcessLookupError:pass
+                    process.wait(timeout=3)
+        except Exception as failure:error=failure
+        finally:
+            for stream in (process.stdin,process.stdout):
+                try:stream.close()
+                except Exception as failure:
+                    if error is None:error=failure
+        if error is not None:raise error
 
     def close(self):
-        self._close_transport()
-        if self.lock is not None:
-            self.lock.close(); self.lock = None
+        held,self.lock=self.lock,None
+        try:self._close_transport()
+        finally:
+            if held is not None:held.close()
 
-    def __exit__(self, *args):
-        self.close()
+    def __exit__(self, exc_type, exc, tb):
+        if exc_type is None:self.close()
+        else:
+            try:self.close()
+            except Exception:logging.getLogger(__name__).warning('Bluetooth operation cleanup failed')

@@ -36,7 +36,7 @@ with sync_playwright() as p:
  page.locator('#addEmojiQuick').click();assert page.locator('.emoji-grid img').count()==60
  assert page.evaluate("[...document.querySelectorAll('.emoji-grid img')].every(i=>i.complete&&i.naturalWidth>0)")
  page.evaluate('closeSheet()')
- page.locator('#menuBtn').click();page.locator('#artCredits').click();assert 'CC BY 4.0' in page.locator('#sheetBody').inner_text();page.evaluate('closeSheet()')
+ page.locator('#menuBtn').click();assert page.locator('#artCredits').count()==0;page.evaluate('closeSheet()')
  # A removed template must not silently turn into another frame.
  page.evaluate("()=>{state.mode='template';state.templateId='legacy-frame';active().templateId='legacy-frame';active().overlays=[{id:'retained',text:'hello',kind:'text'}];save()}")
  page.reload();page.wait_for_function('window.TemplateStudio&&window.LayerEditor');page.evaluate('LayerEditor.ready')

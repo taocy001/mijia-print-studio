@@ -11,7 +11,7 @@ body{background:var(--bg)}.app,body.has-work .app{max-width:680px;padding:0 0 84
 #sheet.sheet,#sheet.sheet.layer-sheet,#sheet.sheet.emoji-sheet{display:flex;flex-direction:column;height:var(--drawer-height,52dvh);max-height:calc(100dvh - 16px);bottom:0;padding:0 18px 14px;overflow:hidden;border-radius:22px 22px 0 0;transition:none}
 #sheet.sheet.drawer-animate{transition:height 180ms ease-out}#sheet.drawer-dragging{user-select:none}#sheet .sheet-handle{display:flex;align-items:center;justify-content:center;flex:0 0 30px;min-height:30px;width:100%;margin:0;background:none;touch-action:none;border-radius:0;cursor:ns-resize}#sheet .sheet-handle>span{display:block;width:34px;height:4px;border-radius:3px;background:#606167}#sheet>header{position:static;background:#202125;flex:0 0 48px;margin:0 0 10px;touch-action:none;cursor:ns-resize}#sheet>header h2{font-size:18px}#sheet #closeSheet.close{display:flex;align-items:center;justify-content:center;width:60px;height:36px;min-height:36px;padding:0;line-height:1;font-size:13px;font-weight:550;border-radius:18px;background:#35363c;color:#eee;cursor:pointer;touch-action:manipulation}#sheet #closeSheet:after,#sheet #closeSheet:before{content:none!important;display:none!important}#sheet #sheetBody{position:relative;flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;touch-action:pan-y;padding:0 2px 10px;scrollbar-width:thin}#sheet #sheetBody button{touch-action:pan-y}#sheet input[type=range]{touch-action:pan-x}#sheet .full-button[data-close]{display:none}
 /* Translucent camera-style controls live on the viewing surface, never the print canvas. */
-.board .photo-tools{position:absolute;z-index:5;left:50%;bottom:16px;transform:translateX(-50%);display:grid;grid-template-columns:repeat(5,1fr);width:min(290px,calc(100% - 48px));height:44px;margin:0;padding:0 8px;gap:2px;background:#17181b80;backdrop-filter:blur(16px);border:1px solid #ffffff22;border-radius:25px;box-shadow:0 3px 16px #0003}.photo-tools button{display:grid;place-items:center;min-height:42px;min-width:44px;width:auto;padding:0;background:none;border:0;border-radius:22px;color:#f5f5f7}.photo-tools small{display:none}.photo-tools svg{width:20px;height:20px;stroke-width:1.8}.photo-tools button.held{background:#ffffff20;color:#e9c46a}body:not(.has-work) .photo-tools,.object-selected .photo-tools,.layer-editing .photo-tools{display:none}.editor-controls:empty{display:none}
+.board .photo-tools{position:absolute;z-index:5;left:50%;bottom:16px;transform:translateX(-50%);display:grid;grid-template-columns:repeat(5,1fr);width:min(290px,calc(100% - 48px));height:44px;margin:0;padding:0 8px;gap:2px;background:#17181b80;backdrop-filter:blur(16px);border:1px solid #ffffff22;border-radius:25px;box-shadow:0 3px 16px #0003}.photo-tools button{display:grid;place-items:center;min-height:42px;min-width:44px;width:auto;padding:0;background:none;border:0;border-radius:22px;color:#f5f5f7}.photo-tools small{display:none}.photo-tools svg{width:20px;height:20px;stroke-width:1.8}.photo-tools button.held{background:#ffffff20;color:#e9c46a}body:not(.has-work) .photo-tools,.layer-editing .photo-tools{display:none}.editor-controls:empty{display:none}
 /* Keep the photo picker against the dock; spare height belongs to the viewing area. */
 body.has-work .app{display:flex;flex-direction:column;min-height:calc(100dvh - 62px);padding:0;margin-bottom:62px}body.has-work .topbar{flex-shrink:0}body.has-work .workspace{flex:1;display:flex;flex-direction:column;justify-content:center}body.has-work .editor-controls{flex-shrink:0}body.has-work.layer-editing .app{padding-bottom:55vh}.photo-tools,.photo-tools button{touch-action:none;user-select:none}.photo-tools{cursor:grab}.photo-tools.dragging{cursor:grabbing;background:#17181b99;box-shadow:0 5px 22px #0006}
 
@@ -49,9 +49,7 @@ body.landscape .tool-tabs{height:100%;min-height:260px;grid-template-columns:1fr
 body.landscape .tool-tabs button{flex-direction:column;font-size:10px;gap:5px;min-height:48px}
 body.landscape .tool-tabs button svg{width:22px;height:22px}
 body.landscape .job-banner{margin:0;padding:6px 2px;font-size:10px}
-body.landscape #layerTools{position:fixed;bottom:8px;left:calc(var(--left-rail) + 8px);max-width:calc(100vw - var(--left-rail) - var(--rail) - 16px);z-index:8;flex-wrap:wrap;background:#202125ed;border-radius:12px;padding:0 6px}
 body.landscape #layerName{display:none}
-body.landscape #layerTools button{padding:0 8px}
 body.landscape.layer-editing #layerTools{display:none}
 body.landscape .empty{min-height:0;height:100%;padding:12px}
 body.landscape .board .photo-tools{bottom:10px}
@@ -97,8 +95,17 @@ body:not(.landscape) .empty{flex:1;min-height:0;padding:24px 18px;background:var
 
 #sheet>header{display:flex;align-items:center;gap:10px}#sheet>header>div{flex:1;min-width:0}
 #settingsBack{width:40px;min-width:40px;min-height:40px;border-radius:12px;background:var(--sage);font-size:28px;line-height:1;touch-action:manipulation}
-body:not(.landscape) #layerTools{position:fixed;z-index:9;left:8px;right:8px;bottom:calc(var(--browser-dock-height,62px) + 80px);padding:4px 8px;border:1px solid var(--line);border-radius:14px;background:var(--paper);box-shadow:0 4px 20px #0003;gap:4px;flex-wrap:wrap}
-body:not(.landscape) #layerTools #layerName{display:none}
-body:not(.landscape) #layerTools button{flex:1;padding:0 6px;white-space:nowrap}
 body:not(.landscape).has-work.layer-editing .app{padding-bottom:0}
 body.layer-editing #layerTools{display:none}
+
+.board .photo-tools #photoTools,.board .photo-tools #layerTools{display:contents}
+.board .photo-tools #layerTools button{padding:0;min-width:44px;min-height:42px}
+
+.copies-row>span{flex:1}.copies-stepper{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.copies-stepper button{display:grid;place-items:center;width:44px;min-height:44px;border-radius:12px;background:var(--sage)}
+.copies-stepper svg{width:18px;height:18px}.copies-stepper output{min-width:24px;text-align:center;font-variant-numeric:tabular-nums}
+.board .photo-tools{position:fixed;z-index:19;width:min(290px,calc(100vw - 32px))}
+
+#sheet[data-kind=menu] .menu-row{padding:12px;gap:12px}#sheet[data-kind=menu] .menu-row>svg:first-child{width:21px;height:21px;flex:0 0 21px}#sheet[data-kind=menu] .menu-row>span{flex:1;margin:0}
+
+.print-failure{width:min(90vw,420px);border:1px solid #73737355;border-radius:22px;padding:24px;background:#fff;color:#242528;box-shadow:0 20px 80px #0005}.print-failure::backdrop{background:#0008}.print-failure h2{font-size:19px;margin-bottom:16px}.print-failure p{font-size:15px;line-height:1.7;overflow-wrap:anywhere}.print-failure>div{display:flex;justify-content:flex-end;gap:12px;margin-top:20px}.print-failure button{padding:10px 15px;border-radius:12px;background:#ededed}.print-failure #failureAcknowledge{background:#e0c17a;color:#242528}.history-placeholder{display:grid;place-items:center;min-height:100px;background:#8882;border-radius:12px}.history-placeholder svg{width:36px;height:36px}@media(prefers-color-scheme:dark){.print-failure{background:#242528;color:#f2f2f2}.print-failure button{background:#3c3d40}}

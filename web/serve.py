@@ -1,11 +1,12 @@
 """Serve the shared editor with an independent desktop backend."""
-import argparse,asyncio,ipaddress,json,os,re,secrets,socket,time,uuid
+import argparse,asyncio,hashlib,ipaddress,json,os,re,secrets,socket,time,uuid
 from pathlib import Path
 from aiohttp import web
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from printing.images import decode,cutout,UserError
-from printing.service import PrintService
+from printing.faces import detect_faces
+from printing.service import PrintService,atomic
 
 ROOT=Path(__file__).resolve().parents[1]
 HEADERS={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'"}
@@ -16,7 +17,12 @@ class Studio:
         self.owns_core=core is None
         self.lan=lan;self.airprint=airprint;self.address_cache=[];self.address_checked=0
         self.data=self.core.data;self.simulate=self.core.simulate
+        try:self.owners=json.loads((self.data/'web-owners.json').read_text())
+        except FileNotFoundError:self.owners={}
         self.code=f'{secrets.randbelow(1000000):06}';self.sessions={};self.failures=0;self.blocked_until=0
+    def remember(self,session):
+        self.owners[session['ownerKey']]={'id':session['id'],'files':sorted(session['files']),'bytes':session['bytes']}
+        atomic(self.data/'web-owners.json',self.owners)
     async def start(self,app):
         if self.owns_core:await self.core.start(app)
     async def stop(self,app):
@@ -33,17 +39,31 @@ class Studio:
                 self.failures+=1
                 if self.failures>=5:self.blocked_until=time.monotonic()+60;self.failures=0
                 return web.Response(text=self.pair_page('配对码不正确或请求过多，请稍后重试'),content_type='text/html',status=403)
-            self.failures=0;token=secrets.token_urlsafe(48);self.sessions[token]={'id':str(uuid.uuid4()),'files':set(),'bytes':0}
-            response=web.HTTPSeeOther('/');response.set_cookie('liuying',token,httponly=True,samesite='Strict');return response
+            self.failures=0;token=secrets.token_urlsafe(48)
+            owner=r.cookies.get('liuying-owner','')
+            if not re.fullmatch('[A-Za-z0-9_-]{64}',owner):owner=secrets.token_urlsafe(48)
+            owner_key=hashlib.sha256(owner.encode()).hexdigest();saved=self.owners.get(owner_key,{})
+            session={'id':saved.get('id',str(uuid.uuid4())),'files':set(saved.get('files',[])),'bytes':0,'uploads':0,'ownerKey':owner_key}
+            for job in self.core.jobs:
+                if job['owner']==session['id']:
+                    session['files'].update('/private/'+page['file'] for page in job.get('pages',[]) if page.get('file'))
+            self.sessions[token]=session;self.remember(session)
+            response=web.HTTPSeeOther('/');response.set_cookie('liuying',token,httponly=True,samesite='Strict');response.set_cookie('liuying-owner',owner,httponly=True,samesite='Strict',max_age=31536000);return response
         session=self.sessions.get(r.cookies.get('liuying'))
         if not session:
             if r.path=='/' and r.method=='GET':return web.Response(text=self.pair_page('输入服务端显示的配对码'),content_type='text/html')
             return web.json_response({'error':'请重新配对'},status=401)
+        peer=r.transport.get_extra_info('peername')
+        can_manage=bool(peer and ipaddress.ip_address(peer[0]).is_loopback)
+        if r.path.startswith('/api/admin/') and not can_manage:raise web.HTTPForbidden()
         if r.method=='GET':
+            if r.path=='/api/admin/queue':
+                jobs=[{k:v for k,v in self.core.public(j).items() if k!='file'} for j in reversed(self.core.jobs)]
+                return web.json_response({'jobs':jobs[:100]})
             if r.path=='/api/state':
                 own=[j for j in self.core.jobs if j['owner']==session['id']];waiting=[j for j in own if j['phase'] in ('queued','printing','uncertain')];job=waiting[0] if waiting else own[-1] if own else {};public=self.core.public(job)
                 if job.get('phase')=='queued' and self.core.paused:public['message']='共享队列已暂停，请在服务端检查'
-                return web.json_response(dict(permission=True,host='desktop',airprintSplice=self.core.airprint_splice,simulation=self.simulate,busy=job.get('phase')=='printing',unresolved=bool(waiting),job=public,history=[self.core.public(j) for j in reversed(own) if j['phase']=='done'][:20],device=self.core.device,message=public.get('message','电脑共享服务已连接')))
+                return web.json_response(dict(permission=True,canManageQueue=can_manage,host='desktop',airprintSplice=self.core.airprint_splice,simulation=self.simulate,busy=job.get('phase')=='printing',unresolved=bool(waiting),job=public,history=[self.core.public(j) for j in reversed(own) if j['phase'] not in ('queued','printing')][:20],device=self.core.device,message=public.get('message','电脑共享服务已连接')))
             if r.path=='/api/sharing':
                 if self.lan and time.monotonic()-self.address_checked>30:
                     def addresses():
@@ -54,7 +74,7 @@ class Studio:
                     self.address_checked=time.monotonic()
                 addresses=list(self.address_cache) if self.lan else []
                 if self.lan and not ipaddress.ip_address(address).is_loopback and address not in addresses:addresses.append(address)
-                return web.json_response(dict(running=True,host='desktop',lan=self.lan,airprint=self.airprint,addresses=[f'http://{value}:{port}' for value in addresses],current='http://'+r.host))
+                return web.json_response(dict(running=True,host='desktop',lan=self.lan,airprint=self.airprint,airprintReady=self.airprint and self.core.airprint_ready(),addresses=[f'http://{value}:{port}' for value in addresses],current='http://'+r.host))
             if r.path=='/session.js':return web.Response(text='window.STUDIO_DRAFT_KEY='+json.dumps('liuying-draft-'+session['id'])+';',content_type='application/javascript')
             if r.path.startswith('/private/'):
                 if r.path not in session['files']:raise web.HTTPNotFound()
@@ -64,26 +84,31 @@ class Studio:
             return web.FileResponse(path)
         if r.path=='/api/upload':
             data=await r.read()
-            if session['bytes']+len(data)>120*1024*1024 or len(session['files'])>=60:raise UserError('照片已达本次会话上限')
+            if session['bytes']+len(data)>120*1024*1024 or session['uploads']>=60:raise UserError('照片已达本次会话上限')
             async with self.core.io_lock:image=await asyncio.to_thread(decode,data)
-            name='photos/'+str(uuid.uuid4())+'.jpg';path=self.data/name;path.parent.mkdir(exist_ok=True);await asyncio.to_thread(image.save,path,'JPEG',quality=97);src='/private/'+name;session['files'].add(src);session['bytes']+=len(data)
-            return web.json_response(dict(src=src,width=image.width,height=image.height))
+            name='photos/'+str(uuid.uuid4())+'.jpg';path=self.data/name;path.parent.mkdir(exist_ok=True);await asyncio.to_thread(image.save,path,'JPEG',quality=97);src='/private/'+name;session['files'].add(src);session['bytes']+=len(data);session['uploads']+=1;self.remember(session)
+            faces=await asyncio.to_thread(detect_faces,image)
+            return web.json_response(dict(src=src,width=image.width,height=image.height,faces=faces))
         if (r.content_length or 0)>(18000000 if r.path=='/api/print' else 4096):raise web.HTTPRequestEntityTooLarge(max_size=18000000,actual_size=r.content_length)
         raw=await r.read()
         if len(raw)>(18000000 if r.path=='/api/print' else 4096):raise UserError('请求过大')
         body=json.loads(raw)
-        if r.path=='/api/print':return web.json_response(await self.core.submit(session,body))
+        if r.path=='/api/print':
+            result=await self.core.submit(session,body);return web.json_response(result)
+        if r.path=='/api/reprint':return web.json_response(await self.core.reprint(session,body))
         if r.path=='/api/cutout':
             source=body['source']
             if source not in session['files'] or not source.startswith(('/private/photos/','/private/prints/')):raise UserError('照片不存在')
             async with self.core.io_lock:outputs=await asyncio.to_thread(cutout,self.data/source[9:],self.data/'cutouts',ROOT/'assets/models/u2netp.onnx')
-            result={c:'/private/cutouts/'+p.name for c,p in outputs.items()};session['files'].update(result.values());return web.json_response({'images':result})
+            result={c:'/private/cutouts/'+p.name for c,p in outputs.items()};session['files'].update(result.values());self.remember(session);return web.json_response({'images':result})
         if r.path=='/api/connect':await self.core.connect();return web.json_response({'ok':True})
         if r.path=='/api/release':await self.core.release();return web.json_response({'ok':True})
         if r.path=='/api/airprint-layout':
             if self.core.device.get('media')!=5012 or not self.core.device.get('connected'):raise UserError('检测到六寸纸盒后才能设置拼接')
             if type(body.get('splice')) is not bool:raise UserError('拼接参数无效')
             self.core.airprint_splice=body['splice'];return web.json_response({'ok':True})
+        if r.path=='/api/admin/reconcile':return web.json_response(await self.core.reconcile(session,body.get('token'),admin=True))
+        if r.path=='/api/admin/resolve':return web.json_response(await self.core.resolve(session,body.get('token'),body.get('confirmed'),admin=True))
         if r.path=='/api/cancel':return web.json_response(await self.core.cancel(session))
         if r.path=='/api/reconcile':return web.json_response(await self.core.reconcile(session))
         raise web.HTTPNotFound()

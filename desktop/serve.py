@@ -25,15 +25,17 @@ async def run(args):
             await runner.setup();await web.TCPSite(runner,'0.0.0.0' if args.lan else '127.0.0.1',args.ipp_port).start()
             print(f'AirPrint: {adapter.uri}',flush=True)
             if args.announce:
-                bonjour=await asyncio.create_subprocess_exec('/usr/bin/dns-sd','-R',args.printer_name,'_ipp._tcp,_universal','local.',str(args.ipp_port),'txtvers=1','qtotal=1','rp=ipp/print','ty='+args.printer_name,'product=(Mijia Instant Photo Printer 2)','Color=T','Duplex=F','kind=photo','priority=50','pdl='+','.join(FORMATS),'URF='+b','.join(URF).decode(),'UUID='+adapter.identity.removeprefix('urn:uuid:'),stdout=asyncio.subprocess.DEVNULL,stderr=asyncio.subprocess.DEVNULL)
-                await asyncio.sleep(.2)
-                if bonjour.returncode is not None:raise RuntimeError('Bonjour registration failed')
+                from desktop.bonjour import Bonjour
+                bonjour=asyncio.create_task(Bonjour(adapter,args.printer_name,args.ipp_port).run())
         if args.simulate:print('模拟模式：不会连接打印机或实际打印。',flush=True)
         stopped=asyncio.Event();loop=asyncio.get_running_loop()
         for sig in (signal.SIGINT,signal.SIGTERM):loop.add_signal_handler(sig,stopped.set)
         await stopped.wait()
     finally:
-        if bonjour and bonjour.returncode is None:bonjour.terminate();await bonjour.wait()
+        if bonjour:
+            bonjour.cancel()
+            try:await bonjour
+            except asyncio.CancelledError:pass
         for runner in reversed(runners):await runner.cleanup()
         await core.stop(None)
 

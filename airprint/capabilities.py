@@ -9,11 +9,14 @@ class IppFailure(Exception):
     def __init__(self,status,message):self.status,self.message=status,message
 class Capabilities:
     @property
-    def media_name(self):return b'custom_square_3x3in' if self.media==5009 else b'na_index-4x6_4x6in'
+    def media_name(self):return {5009:b'custom_square_3x3in',5012:b'na_index-4x6_4x6in',5014:b'na_index-4x6_4x6in'}.get(self.media)
     @property
-    def paper_mm(self):return (7620,7620) if self.media==5009 else (10160,15240)
+    def paper_mm(self):return {5009:(7620,7620),5012:(10160,15240),5014:(10160,15240)}.get(self.media)
+    @property
+    def formats(self):return tuple(f for f in FORMATS if self.media!=5014 or f in ("image/jpeg","application/pdf"))
     def printer_attributes(self):
-        accepting = not self.core.paused and not self.core.released and self.media in (5009,5012,5014) and (self.core.simulate or self.core.device.get('connected',False))
+        accepting = self.core.airprint_ready()
+        busy = any(j.get('phase')=='printing' for j in self.core.jobs)
         attrs = [A(4,0x42,"printer-name","小米照片打印机 2".encode("utf-8")),
             A(4,0x41,"printer-info","小米照片打印机 2".encode("utf-8")),
             A(4,0x45,"printer-uri-supported",self.uri.encode()),
@@ -21,7 +24,7 @@ class Capabilities:
             A(4,0x44,"uri-security-supported",b"none"),
             A(4,0x44,"uri-authentication-supported",b"none"),
             A(4,0x22,"printer-is-accepting-jobs",bytes([bool(accepting)])),
-            A(4,0x23,"printer-state",integer(3 if accepting else 5)),
+            A(4,0x23,"printer-state",integer((4 if busy else 3) if accepting else 5)),
             A(4,0x41,"printer-state-message",('Ready' if accepting else 'Printer unavailable; checking connection').encode()[:512]),
             A(4,0x44,"printer-state-reasons",b"none" if accepting else b"paused"),
             A(4,0x42,"printer-make-and-model",b"Mijia Instant Photo Printer 2 (experimental bridge)"),
@@ -30,7 +33,6 @@ class Capabilities:
             A(4,0x48,"natural-language-configured",b"en"),
             A(4,0x48,"generated-natural-language-supported",b"en"),
             A(4,0x49,"document-format-default",b"image/jpeg"),
-            A(4,0x44,"media-default",self.media_name), A(4,0x44,"media-supported",self.media_name), A(4,0x44,"media-ready",self.media_name),
             A(4,0x22,"color-supported",b"\x01"),
             A(4,0x44,"print-color-mode-supported",b"color"),
             A(4,0x44,"print-color-mode-default",b"color"),
@@ -57,18 +59,19 @@ class Capabilities:
             A(4,0x32,"pwg-raster-document-resolution-supported",integer(300)+integer(300)+b"\x03"),
             A(4,0x44,"pwg-raster-document-type-supported",b"srgb_8"),
             A(4,0x44,"pwg-raster-document-type-supported",b"sgray_8")]
-        attrs += [A(4,0x49,"document-format-supported",v.encode()) for v in FORMATS]
+        attrs += [A(4,0x49,"document-format-supported",v.encode()) for v in self.formats]
         attrs += [A(4,0x23,"operations-supported",integer(v)) for v in OPS]
         attrs += [A(4,0x44,"ipp-versions-supported",v) for v in (b"1.1",b"2.0")]
         attrs += [A(4,0x44,"urf-supported",v) for v in URF]
-        size = {"media-size": (0x34,{"x-dimension":(0x21,integer(self.paper_mm[0])),"y-dimension":(0x21,integer(self.paper_mm[1]))})}
-        size["media-type"]=(0x44,b"photographic")
-        size.update({k:(0x21,integer(0)) for k in ('media-left-margin','media-right-margin','media-top-margin','media-bottom-margin')})
-        attrs.extend(A(4,0x21,k,integer(0)) for k in ('media-left-margin-supported','media-right-margin-supported','media-top-margin-supported','media-bottom-margin-supported'))
-        attrs.append(A(4,0x34,"media-col-default",encode_collection(size)))
-        attrs.append(A(4,0x34,"media-col-database",encode_collection(size)))
-        if not accepting:
-            attrs=[a for a in attrs if a.name!='media-ready']
+        if self.paper_mm:
+            attrs.extend(A(4,0x44,k,self.media_name) for k in ('media-default','media-supported'))
+            if accepting:attrs.append(A(4,0x44,'media-ready',self.media_name))
+            size = {"media-size": (0x34,{"x-dimension":(0x21,integer(self.paper_mm[0])),"y-dimension":(0x21,integer(self.paper_mm[1]))})}
+            size["media-type"]=(0x44,b"photographic")
+            size.update({k:(0x21,integer(0)) for k in ('media-left-margin','media-right-margin','media-top-margin','media-bottom-margin')})
+            attrs.extend(A(4,0x21,k,integer(0)) for k in ('media-left-margin-supported','media-right-margin-supported','media-top-margin-supported','media-bottom-margin-supported'))
+            attrs.append(A(4,0x34,"media-col-default",encode_collection(size)))
+            attrs.append(A(4,0x34,"media-col-database",encode_collection(size)))
         return attrs
 
     def _one(self, req, name, default=None):
@@ -77,8 +80,9 @@ class Capabilities:
         return values[0] if values else default
 
     def _validate(self, req):
+        if not self.core.airprint_ready():raise IppFailure(0x0507,"printer unavailable; refresh printer status")
         mime = self._one(req,"document-format",b"image/jpeg").decode("ascii")
-        if mime not in FORMATS: raise IppFailure(0x040a,"document format not implemented")
+        if mime not in self.formats: raise IppFailure(0x040a,"document format not implemented")
         if self._one(req,"media",self.media_name) != self.media_name: raise IppFailure(0x040b,"requested paper does not match service paper")
         if self._one(req,"copies",integer(1)) != integer(1): raise IppFailure(0x040b,"one copy per AirPrint job")
         if self._one(req,"sides",b"one-sided") != b"one-sided": raise IppFailure(0x040b,"one-sided only")

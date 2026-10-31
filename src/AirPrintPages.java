@@ -30,16 +30,23 @@ final class AirPrintPages {
    }else if(mime.equals("image/urf")||mime.equals("image/pwg-raster")){
     if(media==5014)throw new IOException("Splice supports JPEG and PDF only");RasterImage r=RasterImage.decode(data,mime);images.add(Bitmap.createBitmap(r.pixels,r.width,r.height,Bitmap.Config.ARGB_8888));
    }else throw new IOException("Unsupported document format");
+   List<List<float[]>> faces=new ArrayList<>();for(Bitmap image:images)faces.add(mime.equals("image/jpeg")&&scaling.equals("fill")?FaceDetector.detect(context,image):Collections.emptyList());
+   String placement=mime.equals("application/pdf")?"fit":scaling;
    for(int i=0;i<images.size();i+=media==5014?2:1){
     int w=media==5009?1040:1216,h=media==5009?1040:1824;Bitmap out=Bitmap.createBitmap(w,h,Bitmap.Config.ARGB_8888);out.eraseColor(Color.WHITE);
     try{Canvas canvas=new Canvas(out);if(media==5009)canvas.rotate(180,w/2f,h/2f);
-     if(media==5014){draw(canvas,images.get(i),0,0,w,h/2f,scaling);draw(canvas,images.get(Math.min(i+1,images.size()-1)),0,h/2f,w,h/2f,scaling);}
-     else{Bitmap image=images.get(i);boolean landscape=orientation==4||orientation==5||orientation==0&&media!=5009&&image.getWidth()>image.getHeight();if(orientation==5||orientation==6)canvas.rotate(180,w/2f,h/2f);if(landscape){canvas.translate(0,h);canvas.rotate(-90);draw(canvas,image,0,0,h,w,scaling);}else draw(canvas,image,0,0,w,h,scaling);}
+     if(media==5014){draw(canvas,images.get(i),0,0,w,h/2f,placement,faces.get(i));draw(canvas,images.get(Math.min(i+1,images.size()-1)),0,h/2f,w,h/2f,placement,faces.get(Math.min(i+1,images.size()-1)));}
+     else{Bitmap image=images.get(i);boolean landscape=orientation==4||orientation==5||orientation==0&&media!=5009&&image.getWidth()>image.getHeight();if(orientation==5||orientation==6)canvas.rotate(180,w/2f,h/2f);if(landscape){canvas.translate(0,h);canvas.rotate(-90);draw(canvas,image,0,0,h,w,placement,faces.get(i));}else draw(canvas,image,0,0,w,h,placement,faces.get(i));}
      byte[] encoded=null;for(int quality=97;quality>=60;quality-=3){ByteArrayOutputStream buffer=new ByteArrayOutputStream();out.compress(Bitmap.CompressFormat.JPEG,quality,buffer);encoded=buffer.toByteArray();if(encoded.length<=524288)break;}if(encoded.length>524288)throw new IOException("Image exceeds output limit");
      result.put(new JSONObject().put("media",media).put("copies",1).put("sharpen",0).put("title","AirPrint").put("base64",Base64.encodeToString(encoded,Base64.NO_WRAP)));
     }finally{out.recycle();}
    }return result;
   }finally{for(Bitmap b:images)b.recycle();}
  }
- private static void draw(Canvas c,Bitmap b,float x,float y,float w,float h,String fit){float scale=fit.equals("fit")?Math.min(w/b.getWidth(),h/b.getHeight()):Math.max(w/b.getWidth(),h/b.getHeight());float bw=b.getWidth()*scale,bh=b.getHeight()*scale;c.save();c.clipRect(x,y,x+w,y+h);c.drawBitmap(b,null,new RectF(x+(w-bw)/2,y+(h-bh)/2,x+(w+bw)/2,y+(h+bh)/2),new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG));c.restore();}
+ static void draw(Canvas c,Bitmap b,float x,float y,float w,float h,String fit,List<float[]> faces){
+  FaceCropMath.Plan plan=FaceCropMath.plan(b.getWidth(),b.getHeight(),w/h,faces);c.save();c.clipRect(x,y,x+w,y+h);Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG|Paint.FILTER_BITMAP_FLAG);
+  if(fit.equals("fit")||plan.fit){float scale=Math.min(w/b.getWidth(),h/b.getHeight()),bw=b.getWidth()*scale,bh=b.getHeight()*scale;c.drawBitmap(b,null,new RectF(x+(w-bw)/2,y+(h-bh)/2,x+(w+bw)/2,y+(h+bh)/2),paint);}
+  else{float scale=(float)(w/(plan.width*b.getWidth())),left=x-(float)(plan.left*b.getWidth())*scale,top=y-(float)(plan.top*b.getHeight())*scale;c.drawBitmap(b,null,new RectF(left,top,left+b.getWidth()*scale,top+b.getHeight()*scale),paint);}
+  c.restore();
+ }
 }

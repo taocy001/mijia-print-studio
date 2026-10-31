@@ -32,6 +32,17 @@ public final class Wire {
         return out.array();
     }
 
+    static byte[] jobData(byte[] coat,byte[] jpeg) {
+        if(coat==null)return jpeg;
+        byte[] data=Arrays.copyOf(coat,coat.length+jpeg.length);
+        System.arraycopy(jpeg,0,data,coat.length,jpeg.length);return data;
+    }
+    static byte[] uploadFrame(byte[] key,int job,byte[] data,int index,int sequence)throws Exception {
+        int total=(data.length+987)/988,offset=index*988,len=Math.min(988,data.length-offset);
+        byte[] body=ByteBuffer.allocate(4+len).order(ByteOrder.LITTLE_ENDIAN).putInt(job).put(data,offset,len).array();
+        return frame(4,6,2,sequence,total,index+1,crypt(key,body,true));
+    }
+
     public static final class Frame {
         public final int channel, op, encoding, total, number, attr;
         public final byte[] raw, body;

@@ -9,7 +9,7 @@ import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.util.zip.Deflater;
 
-/** The same ocpattern1 mask format as the Web USB backend. */
+/** Shared ocpattern1 overcoat mask format. */
 final class Overcoat {
     static byte[] encode(byte[] png,int threshold)throws IOException{return encode(png,threshold,5012);}
     static byte[] encode(byte[] png,int threshold,int media)throws IOException{

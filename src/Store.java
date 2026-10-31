@@ -25,8 +25,26 @@ final class Store {
     static JSONObject state(Context c)throws Exception{
         JSONObject job=read(c,"job.json");
         return new JSONObject().put("airprintSplice",PrinterStatus.splice).put("busy",busy).put("message",message).put("device",device).put("job",job)
-            .put("unresolved",job.has("token")&&!terminal(job)).put("history",read(c,"history.json").optJSONArray("items"));
+            .put("unresolved",job.has("token")&&!terminal(job)).put("history",read(c,"history.json").optJSONArray("items")).put("failure",read(c,"failure.json"));
     }
+    static void batchFailure(Context c,JSONObject job)throws Exception{
+        job.put("batchStopped",true);
+        failure(c,"batch-"+job.optString("batchId",job.optString("token")),job.optString("owner"),"batch","本张照片已完成，后续照片准备失败，未继续发送。请检查打印记录后再处理剩余照片");
+        try{write(c,"job.json",job);}catch(Exception e){android.util.Log.w("LiuyingPrint","Batch stop state could not be saved");}
+    }
+    static void recover(Context c)throws Exception{
+        synchronized(LOCK){JSONObject job=read(c,"job.json");String phase=job.optString("phase");
+            if(!busy&&job.has("token")&&(phase.equals("creating")||phase.equals("uploading")||phase.equals("printing"))){
+                job.put("phase","uncertain").put("message","上次打印期间 App 已中断，请检查原任务与出纸结果；不会自动重印");write(c,"job.json",job);archive(c,job);messageFailure(c,job);PrintJobs.finish(c,job);
+            }
+        }
+    }
+    static void failure(Context c,String token,String owner,String stage,String message)throws Exception{
+        JSONObject failure=new JSONObject().put("token",token).put("owner",owner).put("phase","rejected").put("title",owner.equals("local")?"照片打印":"AirPrint 打印")
+            .put("stage",stage).put("message",message).put("createdAt",System.currentTimeMillis()).put("media",PrinterStatus.media());
+        messageFailure(c,failure);archive(c,failure);
+    }
+    static void messageFailure(Context c,JSONObject job)throws Exception{Store.message=job.optString("message");write(c,"failure.json",job);}
     static void archive(Context c,JSONObject job)throws Exception{
         synchronized(LOCK){JSONObject history=read(c,"history.json");JSONArray old=history.optJSONArray("items"),next=new JSONArray();
             next.put(new JSONObject(job.toString()));
