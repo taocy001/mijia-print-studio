@@ -33,7 +33,7 @@ function toast(text){$('toast').textContent=text;$('toast').hidden=false;clearTi
 function bridge(method,...args){if(window.Studio&&typeof Studio[method]==='function')return Studio[method](...args);if(method==='state')return '{}';toast('请在留影工坊 App 中使用此功能');}
 function active(){return state.photos[state.active];}
 function filter(p=active()){return FILTERS.find(f=>f[0]===(p?.filter??state.filter))||FILTERS[0];}
-function selectPhoto(index){state.active=index;if(active()){state.fit=active().fit||'cover';state.border=active().border||0;}if(['photo','template'].includes(state.mode)){state.mode=state.media===5012&&active()?.templateId?'template':'photo';state.templateId=active()?.templateId;}schedule();}
+function selectPhoto(index){state.active=index;if(active()){state.fit=active().fit||'cover';state.border=active().border||0;}if(['photo','template'].includes(state.mode)){state.mode=active()?.templateId?'template':'photo';state.templateId=active()?.templateId;}schedule();}
 if(state.labelTitle===undefined)state.labelTitle=state.label==='名字，留在喜欢的东西上'?'':state.label||'';
 if(state.labelSubtitle===undefined)state.labelSubtitle=state.subtitle==='THIS BELONGS TO ME'?'':state.subtitle||'';
 if(state.cardTitle===undefined)state.cardTitle=state.label==='名字，留在喜欢的东西上'?'':state.label||'';
@@ -104,7 +104,7 @@ function drawId(ctx,p,x,y,w,h){
 }
 function drawPanel(ctx,x,y,w,h,photos){
  const first=photos[0],margin=first?.border??state.border,gap=state.gap,caption=first?.caption??state.caption;
- if(state.mode==='template'&&window.TemplateStudio&&state.media===5012){TemplateStudio.paint(ctx,first,x,y,w,h);return;}
+ if(['photo','template'].includes(state.mode)&&window.TemplateStudio&&first?.templateId){TemplateStudio.paint(ctx,first,x,y,w,h);return;}
  if(state.mode==='card'){StudioExtras.drawCard(ctx,x,y,w,h);return;}
  if(state.mode==='label'){drawLabel(ctx,x,y,w,h);return;}
  if(state.mode==='calendar'){drawCalendar(ctx,first,x,y,w,h);return;}
@@ -202,7 +202,7 @@ function openJob(){const j=native.job||{};if(j.phase==='queued'){openSheet('job'
 async function preparePrintPages(){
  const original=state.active,originalMode=state.mode,originalTemplate=state.templateId,wasPeek=peek,pages=[];
  const indices=['collage','idcard'].includes(state.mode)||['label','card'].includes(state.mode)||(state.mode==='calendar'&&(state.calendarLayout==='plain'||state.media===5014))?[original]:state.media===5014?state.photos.map((_,i)=>i).filter(i=>i%2===0):state.photos.map((_,i)=>i);
- try{if(['label','card'].includes(state.mode))await NameLabels.ready;if(state.mode==='card')await CardArt.ready;peek=false;for(const index of indices){state.active=index;if(['photo','template'].includes(originalMode)){state.mode=state.media===5012&&active()?.templateId?'template':'photo';state.templateId=active()?.templateId;}if(window.TemplateStudio)await TemplateStudio.ensureCurrent();const logical=compose(),output=physical(logical);let jpeg;
+ try{if(['label','card'].includes(state.mode))await NameLabels.ready;if(state.mode==='card')await CardArt.ready;peek=false;for(const index of indices){state.active=index;if(['photo','template'].includes(originalMode)){state.mode=active()?.templateId?'template':'photo';state.templateId=active()?.templateId;}if(window.TemplateStudio)await TemplateStudio.ensureCurrent();const logical=compose(),output=physical(logical);let jpeg;
   for(const quality of [.92,.90,.85,.80]){jpeg=output.toDataURL('image/jpeg',quality);if(atob(jpeg.split(',')[1]).length<=1048576)break;}
   if(atob(jpeg.split(',')[1]).length>1048576)throw Error('作品数据较大，请减少拼图照片后重试');
   const oc=physical(compose(true,'mask'));const pixels=oc.getContext('2d').getImageData(0,0,oc.width,oc.height).data;let hasOc=false;for(let i=0;i<pixels.length;i+=4){if(pixels[i]>100){hasOc=true;break;}}
@@ -230,7 +230,7 @@ $('sheetBody').addEventListener('click',async e=>{
  else if(b.hasAttribute('data-close'))closeSheet();
  else if(b.dataset.setting){changeSetting(b.dataset.setting,b.dataset.value);openLayout();}
  else if(b.dataset.filter){changeSetting('filter',b.dataset.filter);openFilters();}
- else if(b.dataset.paper){state.media=+b.dataset.paper;if(state.mode==='template'&&state.media!==5012){state.mode='photo';toast('当前模板适用 6 寸相纸，已保留照片并切回普通排版');}if(state.media===5014&&state.mode==='collage'){state.mode='photo';toast('拼接纸会将前两张照片分别排在上下两幅');}schedule();closeSheet();}
+ else if(b.dataset.paper){state.media=+b.dataset.paper;if(state.media===5014&&state.mode==='collage'){state.mode='photo';toast('拼接纸会将前两张照片分别排在上下两幅');}schedule();closeSheet();}
  else if(b.dataset.history!==undefined){const j=native.history[+b.dataset.history];openSheet('historyDetail','这张，已经留住了',`<div class="confirmation-preview"><img data-history-image="0" src="/private/${esc(j.file)}" alt="打印记录"></div><p class="hint">${esc(j.message)} · ${PAPER[j.media]?.[0]||'相纸'}</p><button class="full-button" id="importHistory" data-src="/private/${esc(j.file)}" data-media="${j.media}" data-orientation="${j.orientation}">作为新照片继续创作</button>`);fillHistoryPreviews([j]);}
  else if(b.id==='importHistory'){
   if(state.photos.length>=6){toast('最多 6 张照片，请先移除一张');return;}
