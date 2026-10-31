@@ -23,7 +23,7 @@ public final class MainActivity extends Activity {
     private WebView web;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final java.util.concurrent.atomic.AtomicBoolean cutting=new java.util.concurrent.atomic.AtomicBoolean();
-    private boolean picking;
+    private boolean picking,sharingLan;
     private int pickLimit=6;
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
@@ -78,12 +78,16 @@ public final class MainActivity extends Activity {
             catch(Exception e){Store.device=new JSONObject();Store.message="连接失败，请确认打印机开机，且米家未占用蓝牙";event("toast",Store.message);android.util.Log.w("LiuyingPrint","Status",e);}
             finally{Store.busy=false;}},"liuying-status").start();
     }
-    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==7){if(granted())check();else event("toast","需要附近设备权限才能连接打印机");}}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==9&&granted())startSharingService();if(request==7){if(granted())check();else event("toast","需要附近设备权限才能连接打印机");}}
+    private void startSharingService(){
+        if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},8);
+        try{startForegroundService(new Intent(this,SharingService.class).putExtra("lan",sharingLan));}catch(RuntimeException e){event("toast","请解锁手机并保持 App 在前台，再开启共享");}
+    }
     private void service(String action){
         if(!granted()){event("toast","请先连接打印机并允许附近设备权限");return;}
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)
             requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},8);
-        startForegroundService(new Intent(this,PrintService.class).putExtra("action",action));
+        try{startForegroundService(new Intent(this,PrintService.class).putExtra("action",action));}catch(RuntimeException e){event("toast","任务尚未启动，请回到 App 检查打印进度");}
     }
     @Override public void onConfigurationChanged(android.content.res.Configuration configuration){
         super.onConfigurationChanged(configuration);
@@ -91,6 +95,10 @@ public final class MainActivity extends Activity {
         if(web!=null)web.post(()->web.evaluateJavascript("window.updateEditorOrientation&&window.updateEditorOrientation()",null));
     }
     private final class Bridge {
+        @JavascriptInterface public String sharingState(){return SharingService.sharingState().toString();}
+        @JavascriptInterface public void startSharing(boolean lan){main.post(()->{sharingLan=lan;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
+        @JavascriptInterface public void stopSharing(){SharingService.stopSharing();}
+        @JavascriptInterface public void resumeSharing(){SharingService.resumeQueue();}
         @JavascriptInterface public boolean landscape(){return getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE;}
 
         @JavascriptInterface public String state(){try{return Store.state(MainActivity.this).put("permission",granted()).toString();}catch(Exception e){return "{}";}}
@@ -133,33 +141,7 @@ public final class MainActivity extends Activity {
                     JSONObject previous=Store.read(MainActivity.this,"job.json");
                     if(Store.busy||(previous.has("token")&&!Store.terminal(previous)))throw new IOException("请先处理当前打印任务");
                     if(payload.length()>18000000)throw new IOException("照片数据过大");
-                    JSONArray pages=new JSONArray(payload),jobs=new JSONArray();
-                    if(pages.length()<1||pages.length()>6)throw new IOException("每次最多打印 6 张相纸");
-                    String batch=UUID.randomUUID().toString();new File(getFilesDir(),"prints").mkdirs();
-                    for(int i=0;i<pages.length();i++){
-                        JSONObject options=pages.getJSONObject(i);int media=options.getInt("media");
-                        if(media!=5009&&media!=5012&&media!=5014)throw new IOException("相纸类型不支持");
-                        String base64=options.getString("base64");if(base64.length()>1500000)throw new IOException("照片过大");
-                        byte[] bytes=Base64.decode(base64,Base64.DEFAULT);
-                        BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(bytes,0,bytes.length,bounds);
-                        if(bytes.length>1048576||bytes.length<4||bytes[0]!=(byte)255||bytes[1]!=(byte)216||bounds.outWidth!=(media==5009?1040:1216)||bounds.outHeight!=(media==5009?1040:1824))throw new IOException("输出照片尺寸或格式不正确");
-                        int copies=options.optInt("copies",1);if(copies<1||copies>10)throw new IOException("每个作品最多 10 份");
-                        int sharpen=options.optInt("sharpen",0);if(sharpen<0||sharpen>2)throw new IOException("锐度参数无效");
-                        byte[] coat=null;
-                        if(!options.isNull("ocMask")&&options.has("ocMask")){
-                            String encoded=options.getString("ocMask");if(encoded.length()>1500000)throw new IOException("覆膜数据过大");
-                            coat=Overcoat.encode(Base64.decode(encoded,Base64.DEFAULT),options.optInt("threshold",100),media);
-                        }
-                        String token=UUID.randomUUID().toString(),file="prints/"+token+".jpg";
-                        try(FileOutputStream out=new FileOutputStream(new File(getFilesDir(),file))){out.write(bytes);out.getFD().sync();}
-                        String coatFile="";
-                        if(coat!=null){coatFile="prints/"+token+".oc";try(FileOutputStream out=new FileOutputStream(new File(getFilesDir(),coatFile))){out.write(coat);out.getFD().sync();}}
-                        jobs.put(new JSONObject().put("copies",copies).put("ocFile",coatFile).put("ocBytes",coat==null?0:coat.length).put("sharpen",sharpen).put("token",token).put("file",file).put("media",media).put("phase","prepared")
-                            .put("title",options.optString("title","照片")).put("orientation",options.optString("orientation","portrait"))
-                            .put("batchId",batch).put("batchIndex",i+1).put("batchCount",pages.length())
-                            .put("createdAt",System.currentTimeMillis()).put("bytes",bytes.length).put("message","准备打印…").put("progress",0));
-                    }
-                    JSONObject first=jobs.getJSONObject(0);JSONArray remaining=new JSONArray();for(int i=1;i<jobs.length();i++)remaining.put(jobs.get(i));first.put("remaining",remaining);
+                    JSONObject first=PrintJobs.prepare(MainActivity.this,"local",UUID.randomUUID().toString(),payload);
                     Store.write(MainActivity.this,"job.json",first);
                     main.post(()->service("print"));return new JSONObject().put("ok",true).toString();
                 }

@@ -6,7 +6,7 @@ window.CutoutEditor=(()=>{
  async function applyResult(p,job){let color;do{color=job.wanted;await loadVariant(p,color);}while(color!==job.wanted);p.idBackground=color;}
  const ready=Promise.all(state.photos.map(async p=>{if(!p.idBackground)return;try{await loadVariant(p,p.idBackground);if(!images.has(p.idCutouts?.[p.idBackground]))throw Error('missing cutout');}catch{p.idBackground='';p.idCutouts={};toast('抠图缓存不可用，已恢复原底色，请重新选择底色');}})).then(schedule);
  function source(p){return state.mode==='id'&&!peek&&p.idBackground?images.get(p.idCutouts?.[p.idBackground])||images.get(p.src):images.get(p.src);}
- function update(){if(!$('idBackgroundOptions'))return;const p=active(),job=p&&pending.get(p.src);for(const b of $('idBackgroundOptions').querySelectorAll('button')){b.classList.toggle('selected',b.dataset.idBackground===(job?.wanted??p?.idBackground??''));b.disabled=!p;}if($('cutoutStatus'))$('cutoutStatus').textContent=job?'正在手机上抠图…':p?.idBackground?'已换底，可切回原底色':'自动识别主体并换底，原照片保留';}
+ function update(){if(!$('idBackgroundOptions'))return;const p=active(),job=p&&pending.get(p.src);for(const b of $('idBackgroundOptions').querySelectorAll('button')){b.classList.toggle('selected',b.dataset.idBackground===(job?.wanted??p?.idBackground??''));b.disabled=!p;}if($('cutoutStatus'))$('cutoutStatus').textContent=job?'正在处理照片…':p?.idBackground?'已换底，可切回原底色':'自动识别主体并换底，原照片保留';}
  async function select(color){const p=active();if(!p)return;
   const job=pending.get(p.src);if(job){job.wanted=color;if(!color)p.idBackground='';update();schedule();return;}
   if(!color){p.idBackground='';schedule();update();return;}
