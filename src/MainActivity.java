@@ -23,7 +23,7 @@ public final class MainActivity extends Activity {
     private WebView web;
     private final Handler main=new Handler(Looper.getMainLooper());
     private final java.util.concurrent.atomic.AtomicBoolean cutting=new java.util.concurrent.atomic.AtomicBoolean();
-    private boolean picking,sharingLan,sharingAirPrint;
+    private boolean picking,sharingAirPrint;
     private int pickLimit=6;
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
@@ -82,7 +82,7 @@ public final class MainActivity extends Activity {
     @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==9&&granted())startSharingService();if(request==7){if(granted())check();else event("toast","需要附近设备权限才能连接打印机");}}
     private void startSharingService(){
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},8);
-        try{startForegroundService(new Intent(this,SharingService.class).setAction(sharingAirPrint?"airprint":"web").putExtra("lan",sharingLan));}catch(RuntimeException e){event("toast","请解锁手机并保持 App 在前台，再开启共享");}
+        try{startForegroundService(new Intent(this,SharingService.class).setAction(sharingAirPrint?"airprint":"web"));}catch(RuntimeException e){event("toast","请解锁手机并保持 App 在前台，再开启共享");}
     }
     private void service(String action){
         if(!granted()){event("toast","请先连接打印机并允许附近设备权限");return;}
@@ -97,7 +97,7 @@ public final class MainActivity extends Activity {
     }
     private final class Bridge {
         @JavascriptInterface public String sharingState(){return SharingService.sharingState().toString();}
-        @JavascriptInterface public void startSharing(boolean lan){main.post(()->{sharingAirPrint=false;sharingLan=lan;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
+        @JavascriptInterface public void startSharing(){main.post(()->{sharingAirPrint=false;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
         @JavascriptInterface public void startAirPrint(){main.post(()->{sharingAirPrint=true;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
         @JavascriptInterface public void stopAirPrint(){SharingService.stopAirPrint();}
         @JavascriptInterface public void stopSharing(){SharingService.stopSharing();}
