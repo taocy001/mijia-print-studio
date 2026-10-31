@@ -23,7 +23,7 @@ final class PhoneAirPrint implements LocalHttp.Handler {
  }
  private void capabilities(IppWire.Message m,String uri){
   int paper=media();boolean ready=accepting();
-  text(m,0x42,"printer-name","留影工坊 · 手机");text(m,0x41,"printer-info","留影工坊 · 手机蓝牙打印");text(m,0x41,"printer-make-and-model","Liuying Photo Printer");text(m,0x45,"printer-uri-supported",uri);text(m,0x45,"printer-uuid",SharingService.printerUuid(context));
+  text(m,0x42,"printer-name",SharingService.printerName(context));text(m,0x41,"printer-info","留影工坊 · 手机蓝牙打印");text(m,0x41,"printer-make-and-model","Liuying Photo Printer");text(m,0x45,"printer-uri-supported",uri);text(m,0x45,"printer-uuid",SharingService.printerUuid(context));
   text(m,0x44,"uri-security-supported","none");text(m,0x44,"uri-authentication-supported","none");bool(m,"printer-is-accepting-jobs",ready);num(m,0x23,"printer-state",ready?(Store.busy?4:3):5);text(m,0x44,"printer-state-reasons",ready?"none":"paused");text(m,0x41,"printer-state-message",ready?"Ready":"Connect printer on phone");num(m,0x21,"printer-up-time",(int)((System.currentTimeMillis()-started)/1000));num(m,0x21,"queued-job-count",PrintJobs.records(context).length());
   text(m,0x47,"charset-configured","utf-8");text(m,0x47,"charset-supported","utf-8");text(m,0x48,"natural-language-configured","en");text(m,0x48,"generated-natural-language-supported","en");
   for(String v:new String[]{"1.1","2.0"})text(m,0x44,"ipp-versions-supported",v);

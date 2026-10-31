@@ -4,13 +4,13 @@
  const media=matchMedia('(min-width:1000px) and (pointer:fine)'),sheet=$('sheet');
  const open=openSheet,close=closeSheet;let restore=0,last='layout';
  const settings=new Set(['menu','device','paper','sharing','printOptions','coat','credits','workType','history','historyDetail','job']);
- const back=document.createElement('button');back.id='settingsBack';back.textContent='‹';back.setAttribute('aria-label','返回更多设置');back.hidden=true;sheet.querySelector('header').prepend(back);back.onclick=()=>$('menuBtn').click();
+ const back=$('settingsBack');
  const panels={layout:()=>openLayout(),filters:()=>openFilters(),templates:()=>TemplateStudio.open()};
  function refresh(){cancelAnimationFrame(restore);restore=requestAnimationFrame(()=>{if(media.matches&&sheet.hidden)panels[last]?.();});}
  window.openSheet=function(kind,...args){
   cancelAnimationFrame(restore);open(kind,...args);
   const inline=media.matches&&['layout','filters','templates','layers','text'].includes(kind);
-  sheet.classList.toggle('desktop-inspector',inline);sheet.classList.toggle('desktop-settings',media.matches&&settings.has(kind));back.hidden=!media.matches||!settings.has(kind)||kind==='menu';
+  sheet.classList.toggle('desktop-inspector',inline);sheet.classList.toggle('desktop-settings',media.matches&&settings.has(kind));
   if(inline){if(panels[kind])last=kind;sheet.setAttribute('aria-modal','false');$('scrim').hidden=true;}
   document.querySelectorAll('.tool-tabs button').forEach(b=>b.setAttribute('aria-pressed',String(inline&&({layoutBtn:'layout',filterBtn:'filters',templateBtn:'templates',addTextQuick:'文字',addEmojiQuick:'表情'}[b.id]===kind||b.id==='addTextQuick'&&kind==='layers'&&args[0].includes('文字')||b.id==='addEmojiQuick'&&kind==='layers'&&args[0].includes('表情')))));
  };

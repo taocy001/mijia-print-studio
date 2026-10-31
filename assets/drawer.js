@@ -15,7 +15,7 @@ window.Drawer=(()=>{
   if(delta>48)level='half';else if(delta< -40)level='full';else level=current>(half+full)/2?'full':'half';apply(bounds()[level],true);
  }
  for(const el of [handle,header]){
-  el.addEventListener('pointerdown',e=>{if(document.body.classList.contains('desktop-editor')||document.body.classList.contains('landscape')||e.target.closest('#closeSheet')||e.button!==0)return;e.preventDefault();begin(e.clientY);el.setPointerCapture(e.pointerId);});
+  el.addEventListener('pointerdown',e=>{if(document.body.classList.contains('desktop-editor')||document.body.classList.contains('landscape')||e.target.closest('#closeSheet,#settingsBack')||e.button!==0)return;e.preventDefault();begin(e.clientY);el.setPointerCapture(e.pointerId);});
   el.addEventListener('pointermove',e=>{if(drag){e.preventDefault();move(e.clientY);}});
   el.addEventListener('pointerup',()=>end());el.addEventListener('pointercancel',()=>end(true));el.addEventListener('lostpointercapture',()=>end(true));
  }

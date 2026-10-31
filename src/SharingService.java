@@ -43,7 +43,10 @@ public final class SharingService extends PrintService {
  static void stopSharing(){SharingService s=instance;if(s!=null)s.main.post(()->{if(s.ipp==null)s.closeSharing();else{if(s.http!=null){s.http.close();s.http=null;}try{PrintJobs.cancelWaiting(s,false);}catch(Exception ignored){}if(s.api!=null)s.api.sessions.clear();}});}
  static void stopAirPrint(){SharingService s=instance;if(s!=null)s.main.post(()->{s.closeAirPrint();try{PrintJobs.cancelWaiting(s,true);}catch(Exception ignored){}if(s.http==null)s.closeSharing();});}
  static String printerUuid(Context c){android.content.SharedPreferences p=c.getSharedPreferences("printer",0);String id=p.getString("uuid",null);if(id==null){id="urn:uuid:"+UUID.randomUUID();p.edit().putString("uuid",id).apply();}return id;}
+ static String printerName(Context c){SharingService s=instance;return s!=null&&s.ipp!=null?s.airprintName:defaultPrinterName(c);}
+ private static String defaultPrinterName(Context c){return "留影工坊 · 手机 " + printerUuid(c).substring(9,15).toUpperCase(Locale.ROOT);}
  private void announce(){
+  airprintName=defaultPrinterName(this);
   NsdServiceInfo info=new NsdServiceInfo();info.setServiceName(airprintName);info.setServiceType("_ipp._tcp");info.setPort(8637);if(Build.VERSION.SDK_INT>=35)info.setSubtypes(Collections.singleton("_universal"));
   String[][] attrs={{"txtvers","1"},{"qtotal","1"},{"rp","ipp/print"},{"ty","Liuying Photo Printer"},{"product","(Liuying Photo Printer)"},{"Color","T"},{"Duplex","F"},{"kind","photo"},{"priority","50"},{"pdl",String.join(",",AirPrintPages.FORMATS)},{"URF","V1.4,CP1,W8,SRGB24,RS300,DM1"},{"UUID",printerUuid(this).substring(9)}};
   for(String[] attr:attrs)info.setAttribute(attr[0],attr[1]);
