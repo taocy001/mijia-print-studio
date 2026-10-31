@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import subprocess
 import zipfile
+import shutil
 ROOT=Path(__file__).resolve().parent
 SDK=Path(os.environ.get('ANDROID_HOME',str(Path.home()/'Library/Android/sdk')))
 JDK=Path(os.environ.get('JAVA_HOME','/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home'))
@@ -15,7 +16,9 @@ BUILD=ROOT/'build'
 def run(*cmd):
     subprocess.run(list(map(str,cmd)),check=True,env={**os.environ,'JAVA_HOME':str(JDK)})
 def main():
-    for name in ('classes','dex','generated'):(BUILD/name).mkdir(parents=True,exist_ok=True)
+    for name in ('classes','dex','generated','onnxruntime'):
+        shutil.rmtree(BUILD/name,ignore_errors=True)
+        (BUILD/name).mkdir(parents=True,exist_ok=True)
     for name,checksum in json.loads((ROOT/'deps/checksums.json').read_text()).items():
         if hashlib.sha256((ROOT/name).read_bytes()).hexdigest()!=checksum:raise RuntimeError('Dependency checksum mismatch: '+name)
     runtime=BUILD/'onnxruntime';runtime.mkdir(exist_ok=True)
