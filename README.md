@@ -104,3 +104,14 @@ AirPrint 在手机上的发现、纸型展示及最终输出仍需人工验收�
 
 离线回归：`python -m unittest discover -s tests -p 'test_airprint*.py'`。
 需要先构建渲染器并安装 `web/requirements.txt`；测试只使用合成图片和临时数据。
+
+## 编辑功能对齐
+
+原创照片模板现支持六寸横竖版、三寸方形及四寸拼接的单幅比例。
+拼接中每张照片独立选择模板，可与无模板照片混排；切换纸型保留选择。
+模板缩略图、编辑画布和打印输出使用相同的几何参数。
+选中文字或表情后支持 Delete/Backspace 删除，输入框内仍正常编辑文字。
+竖屏的照片选择区紧贴底部五个工具；照片区域独立滚动，空页和选图后位置一致。
+
+回归脚本：`tests/check_template_papers.py`、`tests/check_ui_parity.py`。
+对齐记录和保留的平台差异见 `PARITY.txt`。测试不会实际打印。
