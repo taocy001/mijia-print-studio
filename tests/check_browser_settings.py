@@ -36,10 +36,7 @@ with sync_playwright() as p:
  page.locator('#settingsBack').click();page.locator('#menuPrintOptions').click();page.locator('#extraCopies').fill('3');page.locator('#sheetTitle').click();assert page.evaluate("state.copies===3&&sheetKind==='printOptions'")
  page.locator('#settingsBack').click();page.locator('#menuCoat').click();page.locator('[data-coat="grid"]').click();assert page.evaluate("sheetKind==='coat'")
  assert not errors,errors
- ctx=browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True);mobile=ctx.new_page();mobile.route('https://studio.test/**',route);mobile.goto('https://studio.test/');mobile.wait_for_selector('#fullscreenBtn')
- assert not mobile.evaluate('!!document.fullscreenElement')
- mobile.locator('#fullscreenBtn').click();mobile.wait_for_function('!!document.fullscreenElement');assert mobile.locator('#fullscreenBtn').get_attribute('aria-label')=='退出全屏'
- mobile.locator('#fullscreenBtn').click();mobile.wait_for_function('!document.fullscreenElement')
+ ctx=browser.new_context(viewport={'width':390,'height':844},is_mobile=True,has_touch=True);mobile=ctx.new_page();mobile.route('https://studio.test/**',route);mobile.goto('https://studio.test/');mobile.wait_for_selector('#menuBtn');assert mobile.locator('#fullscreenBtn').count()==0
  assert mobile.evaluate('document.documentElement.scrollWidth<=innerWidth')
- print('PASS: large settings, persistent connection/paper/layout panels, live addresses, copies/coat changes, mobile fullscreen enter/exit')
+ print('PASS: large settings, persistent connection/paper/layout panels, live addresses, copies/coat changes, mobile standard browser layout')
  browser.close()
