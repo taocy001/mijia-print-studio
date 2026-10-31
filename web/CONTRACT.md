@@ -33,13 +33,27 @@ Android App 内主动开启共享，默认仅监听本机；同一 Wi-Fi 共享�
 ## 电脑后端
 
 `serve.py` 实现同一 HTTP 接口与会话隔离，默认端口 8635，照片合成仍在共用编辑器完成。
-`bluetooth_client.py`、`bluetooth_printer.py`、`native/` 为独立 Mac 蓝牙后端；不导入其他项目、不调用旧 Web/AirPrint 服务。
-跨进程设备锁仅用于避免两套程序同时占用同一台打印机，配置、数据和任务队列各自独立。
+`printing/` 持有公共队列、图片校验和蓝牙后端；`web/native/` 为系统蓝牙助手。Web 与 AirPrint 均不调用旧项目或彼此入口。
+`desktop/serve.py` 为两个独立 HTTP 适配器注入同一个 PrintService。服务级锁阻止同一设备出现第二个队列，底层设备锁仍防止与旧程序同时连接。
 模拟模式不构建 BluetoothPrinter，也不启动蓝牙助手。
 电脑端已提交任务支持请求取消；异常结果保留打印意图记录，暂停队列，不自动重印。电脑端支持查询已取得编号的原任务；没有任务编号或服务重启后的未知记录仍需在服务端核对。
 
 ## 迁移边界
 
-共用编辑器、Android 承载 Web、电脑独立 Web 与蓝牙后端已进入同一仓库。
+共用编辑器、Android 承载 Web、电脑 Web、AirPrint 与蓝牙后端已进入同一仓库。
 原电脑 Web、AirPrint/AirDrop 未移动、未改动，也未切换运行入口。新入口仍需用户确认使用体验后替换原服务。
 手机 App 与浏览器使用相同的编辑数据、模板和合成实现；平台相关的文件导入、抠图与蓝牙能力保留独立适配。
+
+## 公共打印核心
+
+`printing/service.py` 不导入 Web 或 AirPrint。适配器调用 `submit(session, body)`，
+传入作用域 owner、幂等 requestId 和已合成页面；核心完成验证、持久化与串行发送。
+`cancel`、`reconcile` 按 owner 操作。`jobs`、`device` 为状态视图，不接受 HTTP 文件路径。
+AirPrint 任务使用独立 owner，浏览器会话不能读取或取消这些任务。
+当前部署为一个服务进程、两个可选监听端口；不要求 Web 适配器启动后 AirPrint 才能工作。
+Android 继续使用自身平台队列，不依赖 Mac 进程。
+
+IPP 实现参考 RFC 8011：https://www.rfc-editor.org/rfc/rfc8011.html 。
+支持 Print-Job、Validate-Job、Create-Job/Send-Document、Get-Printer-Attributes、
+Get-Jobs、Get-Job-Attributes、Cancel-Job；单文档任务，按来源地址隔离任务查询。
+IP 隔离不等于身份认证，AirPrint 只向明确允许的可信网段开放。
