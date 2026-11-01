@@ -28,6 +28,8 @@ public final class MainActivity extends Activity {
     private ValueCallback<Uri[]> textFileCallback;
     private final java.util.concurrent.atomic.AtomicBoolean savingProject=new java.util.concurrent.atomic.AtomicBoolean();
     private volatile byte[] pendingProject;
+    private final java.util.concurrent.atomic.AtomicBoolean savingImage=new java.util.concurrent.atomic.AtomicBoolean();
+    private volatile byte[] pendingImage;
     private final java.util.concurrent.atomic.AtomicBoolean captureWorking=new java.util.concurrent.atomic.AtomicBoolean();
     private boolean captureWebReady;
     private String captureDelivered;
@@ -156,6 +158,19 @@ public final class MainActivity extends Activity {
             try{CameraCapture.acknowledge(MainActivity.this,id);main.post(()->captureDelivered=null);return "{\"ok\":true}";}
             catch(Exception error){event("toast","拍摄记录确认失败，可稍后恢复");return "{\"error\":\"拍摄记录确认失败\"}";}
         }
+        @JavascriptInterface public String saveImage(String base64){
+            if(!savingImage.compareAndSet(false,true))return "{\"error\":\"已有图片正在保存\"}";
+            try{pendingImage=ProjectFiles.imageBytes(base64);}
+            catch(Exception|OutOfMemoryError error){pendingImage=null;savingImage.set(false);return "{\"error\":\"图片无效或超过 8 MB\"}";}
+            main.post(()->{
+                if(isFinishing()||isDestroyed()){pendingImage=null;savingImage.set(false);event("imageSaved","cancelled");return;}
+                Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType("image/jpeg").putExtra(Intent.EXTRA_TITLE,"mijia-photo.jpg");
+                try{startActivityForResult(intent,15);}
+                catch(Exception error){pendingImage=null;savingImage.set(false);event("imageSaved","error");}
+            });
+            return "{\"ok\":true}";
+        }
         @JavascriptInterface public String saveProject(String json){
             if(!savingProject.compareAndSet(false,true))return "{\"error\":\"已有作品正在保存\"}";
             try{pendingProject=ProjectFiles.projectBytes(json);}
@@ -267,6 +282,18 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==15){
+            byte[] bytes=pendingImage;pendingImage=null;
+            if(bytes==null){savingImage.set(false);return;}
+            if(result!=RESULT_OK){savingImage.set(false);event("imageSaved","cancelled");return;}
+            Uri uri=data==null?null:data.getData();
+            Thread writer=new Thread(()->{
+                try{ProjectFiles.write(MainActivity.this,uri,bytes);event("imageSaved","saved");}
+                catch(Exception error){event("imageSaved","error");}
+                finally{savingImage.set(false);}
+            },"liuying-image-save");
+            try{writer.start();}catch(RuntimeException|OutOfMemoryError error){savingImage.set(false);event("imageSaved","error");}return;
+        }
         if(request==14){receiveCapture(result==RESULT_OK,null);return;}
         if(request==13){
             byte[] bytes=pendingProject;pendingProject=null;
@@ -306,5 +333,5 @@ public final class MainActivity extends Activity {
         },"liuying-import").start();
     }
     @Override public void onBackPressed(){web.evaluateJavascript("window.goBack?window.goBack():false",value->{if(!"true".equals(value))super.onBackPressed();});}
-    @Override protected void onDestroy(){captureWebReady=false;pendingProject=null;savingProject.set(false);if(textFileCallback!=null){textFileCallback.onReceiveValue(null);textFileCallback=null;}if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){pendingImage=null;savingImage.set(false);captureWebReady=false;pendingProject=null;savingProject.set(false);if(textFileCallback!=null){textFileCallback.onReceiveValue(null);textFileCallback=null;}if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
 }
