@@ -23,7 +23,9 @@ with sync_playwright() as p:
    page.route('https://studio.test/**',route);page.goto('https://studio.test/');page.evaluate('LayerEditor.ready')
    page.evaluate("async()=>{await addPhotos([{src:'/sample.svg'}]);render()}")
    print('Checking',native,width,height,flush=True);page.locator('#templateBtn').click();page.wait_for_function("typeof $('noTemplate')?.onclick==='function'&&typeof document.querySelector('[data-template]')?.onclick==='function'")
-   for index in [15,14,0]:
+   assert page.locator('#scrim').evaluate("e=>{const s=getComputedStyle(e);return s.backdropFilter==='none'&&s.backgroundColor==='rgba(0, 0, 0, 0)'}")
+   assert page.locator('#sheet').evaluate("e=>getComputedStyle(e).boxShadow==='none'")
+   for index in [19,15,14,0]:
     choice=page.locator('[data-template]').nth(index);choice.scroll_into_view_if_needed();scroll=page.locator('#sheetBody').evaluate('(e)=>e.scrollTop');panel=page.locator('#sheet').bounding_box();key=choice.get_attribute('data-template');choice.click();page.wait_for_timeout(100)
     assert page.evaluate("sheetKind==='templates'&&!$('sheet').hidden")
     assert page.locator('#sheet').bounding_box()==panel

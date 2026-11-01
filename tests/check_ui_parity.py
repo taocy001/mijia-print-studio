@@ -30,7 +30,7 @@ with sync_playwright() as p:
    after=page.locator('#photos').bounding_box();assert abs(after['y']-before['y'])<2,(width,before,after)
    for id in ['layoutBtn','filterBtn','templateBtn','addTextQuick','addEmojiQuick']:
     box=page.locator('#'+id).bounding_box();assert box and box['y']>=0 and box['y']+box['height']<=height+1,(id,box)
-   page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===16")
+   page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===20")
    assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
    page.evaluate('closeSheet()');page.locator('#addTextQuick').click()
    assert page.evaluate('active().overlays.length')==0

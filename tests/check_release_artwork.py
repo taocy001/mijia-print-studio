@@ -24,14 +24,14 @@ with sync_playwright() as p:
  for direction in ['portrait','landscape']:
   page.evaluate('(d)=>{state.orientation=d;state.mode="photo";render()}',direction)
   page.locator('#templateBtn').click()
-  page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===16")
+  page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===20")
   assert page.locator('#noTemplate').get_attribute('aria-pressed')=='true'
   page.locator('[data-template="studio-petal"]').click()
   assert page.evaluate('active().templateId')=='studio-petal'
   output=page.evaluate('async()=>{const p=await preparePrintPages();return [p.length,p[0].base64.length]}')
   assert output[0]==1 and output[1]>10000,output
   page.evaluate('TemplateStudio.open()')
-  page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===16")
+  page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===20")
   page.locator('#noTemplate').click();assert page.evaluate('active().templateId') is None
  page.locator('#addEmojiQuick').click();assert page.locator('.emoji-grid img').count()==60
  assert page.evaluate("[...document.querySelectorAll('.emoji-grid img')].every(i=>i.complete&&i.naturalWidth>0)")
