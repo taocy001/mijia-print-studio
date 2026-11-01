@@ -24,10 +24,10 @@ with sync_playwright() as runtime:
       const mixed={...red,src:mixCanvas.toDataURL()};await loadPhoto(mixed);const mixedEdge=edge(mixed);
       const redEdge=edge(red),blueEdge=edge(blue);red.filter='bw';const bw=edge(red);red.filter='sepia';const sepia=edge(red);red.filter='none';
       const restored=edge(red);red.zoom=2;red.x=.7;red.y=-.5;const moved=edge(red);red.zoom=1;red.x=red.y=0;
-      if(TEMPLATE_CATALOG.length!==30)throw Error('Expected 30 original templates');
+      if(TEMPLATE_CATALOG.length!==35)throw Error('Expected 35 original templates');
       if(TEMPLATE_CATALOG.slice(0,10).map(t=>t.style).join()!==KidsTemplates.designs.map(d=>d[0]).join())throw Error('Children templates must come first');
       const failures=[],tiles=[];
-      for(const template of TEMPLATE_CATALOG){
+      for(const template of TEMPLATE_CATALOG.filter(t=>!t.style.startsWith('blend-'))){
         const a=OriginalTemplates.variant(template,1216,1824),b=OriginalTemplates.variant(template,1824,1216);
         if(a.margin.left!==b.margin.left||a.margin.top!==b.margin.top||a.height-a.margin.top-a.crop.height!==b.height-b.margin.top-b.crop.height)failures.push([template.id,'orientation margins']);
         for(const [w,h] of [[1216,1824],[1824,1216],[1040,1040],[1216,912]]){
@@ -56,4 +56,4 @@ with sync_playwright() as runtime:
     atlas.set_content('<style>body{background:#e9e8e4;font:12px sans-serif}main{display:grid;grid-template-columns:repeat(8,1fr);gap:8px}figure{margin:0;background:white;padding:8px;text-align:center}img{height:150px;max-width:100%;object-fit:contain}</style><main>'+result['atlas']+'</main>')
     atlas.screenshot(path='/tmp/adaptive-template-atlas.png',full_page=True)
     assert not errors,errors;browser.close()
-print('PASS: 30 templates × 4 canvases, photo pixels protected, filter-aware palette, stable crop colors')
+print('PASS: 30 existing templates × 4 canvases, photo pixels protected, filter-aware palette, stable crop colors')

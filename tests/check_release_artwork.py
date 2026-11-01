@@ -19,20 +19,21 @@ with sync_playwright() as p:
 
  page.evaluate('Promise.all([NameLabels.ready,CardArt.ready,LayerEditor.ready])')
  page.evaluate("async()=>{await loadPhoto({src:'/sample.svg'});state.photos=[{src:'/sample.svg',width:1200,height:800,turn:0,zoom:1,x:0,y:0,fit:'cover',border:0,filter:'none',templateId:null,overlays:[]}];state.media=5012;}")
- assert page.evaluate('TEMPLATE_CATALOG.length')==16
+ assert page.evaluate('TEMPLATE_CATALOG.length')==35
  assert page.evaluate('TEMPLATE_CATALOG.every(t=>t.original&&!t.bg&&!t.landscape.bg)')
  for direction in ['portrait','landscape']:
   page.evaluate('(d)=>{state.orientation=d;state.mode="photo";render()}',direction)
   page.locator('#templateBtn').click()
-  page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===30")
+  page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===TEMPLATE_CATALOG.length")
   assert page.locator('#noTemplate').get_attribute('aria-pressed')=='true'
   page.locator('[data-template="studio-petal"]').click()
   assert page.evaluate('active().templateId')=='studio-petal'
   output=page.evaluate('async()=>{const p=await preparePrintPages();return [p.length,p[0].base64.length]}')
   assert output[0]==1 and output[1]>10000,output
   page.evaluate('TemplateStudio.open()')
-  page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===30")
+  page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===TEMPLATE_CATALOG.length")
   page.locator('#noTemplate').click();assert page.evaluate('active().templateId') is None
+  page.evaluate('closeSheet()')
  page.locator('#addEmojiQuick').click();assert page.locator('.emoji-grid img').count()==60
  assert page.evaluate("[...document.querySelectorAll('.emoji-grid img')].every(i=>i.complete&&i.naturalWidth>0)")
  page.evaluate('closeSheet()')
@@ -53,5 +54,5 @@ with sync_playwright() as p:
  }""")
  preview=b.new_page(viewport={'width':1600,'height':1200});preview.set_content(atlas);preview.screenshot(path='/tmp/liuying-release-artwork.png',full_page=True)
  assert not errors,errors
- print('PASS: 16 original frames in both directions, print composition, 60 vector emoji, attribution, old-draft migration; no printing')
+ print('PASS: 35 original templates in both directions, print composition, 60 vector emoji, attribution, old-draft migration; no printing')
  b.close()
