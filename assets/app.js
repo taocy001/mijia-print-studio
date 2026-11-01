@@ -135,7 +135,7 @@ function compose(includeLayers=true,layerMode='photo'){
  if(peek&&active()){drawPhoto(ctx,active(),0,0,w,h,'contain');return canvas;}
  const photos=state.mode==='collage'?state.photos:[active()];
  const frames=[],previousFrames=composingFrames;composingFrames=frames;
- try{if(state.mode==='idcard'){StudioExtras.drawIdCardSheet(ctx,w,h);}else if(state.mode==='calendar'&&state.media===5014){const [year,month]=state.month.split('-').map(Number),next=month===12?`${year+1}-01`:`${year}-${String(month+1).padStart(2,'0')}`;drawCalendar(ctx,null,0,0,w,h/2,state.month);drawCalendar(ctx,null,0,h/2,w,h/2,next);}else if(state.media===5014){drawPanel(ctx,0,0,w,h/2,[state.photos[Math.floor(state.active/2)*2]]);drawPanel(ctx,0,h/2,w,h/2,[state.photos[Math.floor(state.active/2)*2+1]||state.photos[Math.floor(state.active/2)*2]]);}else drawPanel(ctx,0,0,w,h,photos);}finally{composingFrames=previousFrames;}
+ try{if(state.mode==='collage'&&state.collageLayout==='strip'){PhotoStrips.paint(ctx,w,h,state.photos);}else if(state.mode==='idcard'){StudioExtras.drawIdCardSheet(ctx,w,h);}else if(state.mode==='calendar'&&state.media===5014){const [year,month]=state.month.split('-').map(Number),next=month===12?`${year+1}-01`:`${year}-${String(month+1).padStart(2,'0')}`;drawCalendar(ctx,null,0,0,w,h/2,state.month);drawCalendar(ctx,null,0,h/2,w,h/2,next);}else if(state.media===5014){drawPanel(ctx,0,0,w,h/2,[state.photos[Math.floor(state.active/2)*2]]);drawPanel(ctx,0,h/2,w,h/2,[state.photos[Math.floor(state.active/2)*2+1]||state.photos[Math.floor(state.active/2)*2]]);}else drawPanel(ctx,0,0,w,h,photos);}finally{composingFrames=previousFrames;}
  if(layerMode==='mask'){ctx.fillStyle='#000';ctx.fillRect(0,0,w,h);}
  if(window.StudioExtras)StudioExtras.paintCoat(ctx,w,h,frames,layerMode);
  if(includeLayers&&window.LayerEditor){if(!['label','card'].includes(state.mode)&&!(state.mode==='calendar'&&(state.calendarLayout==='plain'||state.media===5014))&&(state.media===5014||state.mode==='collage')){for(const f of frames){ctx.save();ctx.beginPath();ctx.rect(f.x,f.y,f.w,f.h);ctx.clip();ctx.translate(f.x,f.y);LayerEditor.paint(ctx,f.w,f.h,f.p.overlays||[],layerMode);ctx.restore();}}else LayerEditor.paint(ctx,w,h,undefined,layerMode);}
@@ -181,7 +181,7 @@ function updateStatus(){
 function detectedPaper(){const d=native.device||{};return d.connected&&Date.now()-d.checkedAt<150000&&[5009,5012].includes(+d.media)?+d.media:0;}
 function syncPaper(){
  const tray=detectedPaper(),media=tray===5009?5009:tray===5012?(state.sixLayout===5014?5014:5012):state.media;
- if(media!==state.media){state.media=media;if(media===5014&&state.mode==='collage')state.mode='photo';if(pendingPrint){closeSheet();toast('相纸已变化，请重新预览');}schedule();}if(tray&&state.photos.some(p=>p.facePending)){applyPendingFaceCrop();schedule();}
+ if(media!==state.media){state.media=media;if(media===5014&&state.mode==='collage'&&state.collageLayout!=='strip')state.mode='photo';if(pendingPrint){closeSheet();toast('相纸已变化，请重新预览');}schedule();}if(tray&&state.photos.some(p=>p.facePending)){applyPendingFaceCrop();schedule();}
 }
 function poll(){try{const previous=detectedPaper();native=JSON.parse(bridge('state')||'{}');syncPaper();if(previous!==detectedPaper()&&sheetKind==='paper')openPaper();updateStatus();refreshDeviceSheet();window.dispatchEvent(new Event('studio-state'));}catch(e){}}
 function openSheet(kind,title,html){
@@ -199,9 +199,10 @@ window.goBack=()=>{if(sheetKind){closeSheet();return true;}if(window.LayerEditor
 function segments(key,choices){return `<div class="segments">${choices.map(([v,n])=>`<button data-setting="${key}" data-value="${v}" class="${String(state[key])===String(v)?'selected':''}">${n}</button>`).join('')}</div>`;}
 function openWorkType(){openSheet('workType','打印类型',`<div class="mode-grid">${MODES.filter(m=>m[0]!=='template').map(([key,name])=>`<button data-layout-mode="${key}" class="${state.mode===key?'selected':''}">${icon(key)}<span>${name}</span></button>`).join('')}</div>`);}
 function openLayout(){
+ const border=state.mode==='collage'&&state.collageLayout==='strip'?(state.stripBorder??state.photos[0]?.border??0):state.border;
  let html='';html+=['label','id'].includes(state.mode)?'':`<div class="field"><label>照片如何放进相纸</label>${segments('fit',[['cover','铺满相纸'],['contain','完整保留'],...(['photo','template'].includes(state.mode)?[['bottom','底部留白']]:[])])}</div>`;
  if(state.media===5012)html+=`<div class="field"><label>相纸方向 <span>旋转照片不会改变相纸方向</span></label>${segments('orientation',[['auto','自动'],['portrait','竖版'],['landscape','横版']])}</div>`;
- if(['photo','collage'].includes(state.mode))html+=`<div class="field"><label>${state.fit==='bottom'?'底部留白':'白边'} <span id="borderValue">${(state.border*25.4/300).toFixed(1)} mm</span></label><input type="range" id="borderInput" min="0" max="200" step="1" value="${state.border}"></div>`;
+ if(['photo','collage'].includes(state.mode))html+=`<div class="field"><label>${state.fit==='bottom'?'底部留白':'白边'} <span id="borderValue">${(border*25.4/300).toFixed(1)} mm</span></label><input type="range" id="borderInput" min="0" max="200" step="1" value="${border}"></div>`;
  if(state.mode==='collage')html+=`<div class="field"><label>照片间距 <span id="gapValue">${(state.gap*25.4/300).toFixed(1)} mm</span></label><input id="gapInput" type="range" min="0" max="80" step="4" value="${state.gap}"></div><p class="hint">最多 6 张照片拼成一张相纸。点击下方缩略图，可单独调整每张照片的位置。</p>`;
  if(state.mode==='calendar')html+=`<div class="field"><label>选择月份</label><input id="monthInput" type="month" value="${esc(state.month)}"></div>`;
  if(state.mode==='id')html+=`<div class="field"><label>证件照尺寸</label>${segments('idSize',[['25x35','一寸 · 25×35'],['35x45','35×45'],['35x49','二寸 · 35×49'],['33x48','大一寸 · 33×48'],['51x51','美签 · 51×51'],['45x45','日签 · 45×45']])}</div><p class="hint">按 300 dpi 实际尺寸排版。换底仅在本机处理。建议使用人物清晰、背景简单的正面照片。</p>`;
@@ -273,7 +274,7 @@ async function preparePrintPages(){
   for(const quality of [.92,.90,.85,.80]){jpeg=output.toDataURL('image/jpeg',quality);if(atob(jpeg.split(',')[1]).length<=1048576)break;}
   if(atob(jpeg.split(',')[1]).length>1048576)throw Error('作品数据较大，请减少拼图照片后重试');
   const oc=physical(compose(true,'mask'));const pixels=oc.getContext('2d').getImageData(0,0,oc.width,oc.height).data;let hasOc=false;for(let i=0;i<pixels.length;i+=4){if(pixels[i]>100){hasOc=true;break;}}
-  pages.push({ocMask:hasOc?oc.toDataURL('image/png').split(',')[1]:null,sharpen:photoSharpness(state.mode==='collage'?state.photos[0]:active()),copies:state.copies||1,threshold:active()?.coatThreshold||state.coatThreshold||100,base64:jpeg.split(',')[1],preview:logical.toDataURL('image/jpeg',.72),media:state.media,title:MODES.find(m=>m[0]===state.mode)[1],orientation:logical.width===logical.height?'square':logical.width>logical.height?'landscape':'portrait'});
+  pages.push({ocMask:hasOc?oc.toDataURL('image/png').split(',')[1]:null,sharpen:photoSharpness(state.mode==='collage'?state.photos[0]:active()),copies:state.copies||1,threshold:(state.mode==='collage'?state.photos[0]:active())?.coatThreshold||state.coatThreshold||100,base64:jpeg.split(',')[1],preview:logical.toDataURL('image/jpeg',.72),media:state.media,title:MODES.find(m=>m[0]===state.mode)[1],orientation:logical.width===logical.height?'square':logical.width>logical.height?'landscape':'portrait'});
  }}finally{state.active=original;state.mode=originalMode;state.templateId=originalTemplate;peek=wasPeek;await TemplateStudio?.ensureCurrent();}
  return pages;
 }
@@ -283,7 +284,7 @@ async function confirmPrint(){
  $('printBtn').disabled=true;
  try{const pages=await preparePrintPages();if(!pages.length)return;
   pendingPrint={pages};
-  openSheet('confirm','打印预览',`<div class="print-pages">${pages.map((p,i)=>`<figure><div class="confirmation-preview"><img src="${p.preview}" alt="第 ${i+1} 张最终打印效果"></div><figcaption>第 ${i+1} / ${pages.length} 张 · ${p.orientation==='square'?'方形':p.orientation==='landscape'?'横版':'竖版'} · ${p.copies} 份${p.ocMask?' · 含覆膜隐藏内容':''}</figcaption></figure>`).join('')}</div><div class="confirm-summary"><strong>${PAPER[state.media][0]} · 共 ${pages.reduce((n,p)=>n+p.copies,0)} 张相纸</strong><span>${filter()[1]}</span></div><p class="hint">${state.media===5014&&state.photos.length%2?'最后一张照片重复填满上下两格。':''}${state.media===5014?'同页覆膜深浅使用第一张照片的设置。':''}${pages.length>1?'上下滑动查看全部打印页。':''}将依次打印以上全部内容；中断时停止后续照片，不会自动重复打印。</p><button class="full-button" id="confirmSend">${icon('printer')} 确认打印 ${pages.reduce((n,p)=>n+p.copies,0)} 张</button>`);
+  openSheet('confirm','打印预览',`<div class="print-pages">${pages.map((p,i)=>`<figure><div class="confirmation-preview"><img src="${p.preview}" alt="第 ${i+1} 张最终打印效果"></div><figcaption>第 ${i+1} / ${pages.length} 张 · ${p.orientation==='square'?'方形':p.orientation==='landscape'?'横版':'竖版'} · ${p.copies} 份${p.ocMask?' · 含覆膜隐藏内容':''}</figcaption></figure>`).join('')}</div><div class="confirm-summary"><strong>${PAPER[state.media][0]} · 共 ${pages.reduce((n,p)=>n+p.copies,0)} 张相纸</strong><span>${filter()[1]}</span></div><p class="hint">${state.media===5014&&!(state.mode==='collage'&&state.collageLayout==='strip')&&state.photos.length%2?'最后一张照片重复填满上下两格。':''}${state.media===5014?'同页覆膜深浅使用第一张照片的设置。':''}${pages.length>1?'上下滑动查看全部打印页。':''}将依次打印以上全部内容；中断时停止后续照片，不会自动重复打印。</p><button class="full-button" id="confirmSend">${icon('printer')} 确认打印 ${pages.reduce((n,p)=>n+p.copies,0)} 张</button>`);
   window.PaperPreview?.mount($('sheetBody'),pages);
  }catch(e){toast(e.message||'无法生成打印预览');}finally{updateStatus();}
 }
@@ -294,11 +295,11 @@ function removePhoto(index){const photo=state.photos[index];if(!photo)return;con
 $('menuBtn').onclick=()=>{openSheet('menu','更多',`<button class="menu-row" id="menuWorkType">${icon('layout')}<span>打印类型</span>${icon('chevron')}</button><button class="menu-row" id="menuDevice">${icon('printer')}<span>打印机与连接</span>${icon('chevron')}</button><button class="menu-row" id="menuHistory">${icon('history')}<span>打印记录</span>${icon('chevron')}</button>`);$('menuWorkType').onclick=openWorkType;$('menuDevice').onclick=openDevice;$('menuHistory').onclick=openHistory;};
 $('sheetBody').addEventListener('click',async e=>{
  const b=e.target.closest('button');if(!b)return;
- if(b.dataset.layoutMode){state.mode=b.dataset.layoutMode;if(state.mode==='photo'&&active()){active().templateId=null;state.templateId=null;}schedule();openLayout();}
+ if(b.dataset.layoutMode){state.mode=b.dataset.layoutMode;if(state.mode==='collage'&&state.media===5014)state.collageLayout='strip';if(state.mode==='photo'&&active()){active().templateId=null;state.templateId=null;}schedule();openLayout();}
  else if(b.hasAttribute('data-close'))closeSheet();
  else if(b.dataset.setting){changeSetting(b.dataset.setting,b.dataset.value);openLayout();}
  else if(b.dataset.filter){changeSetting('filter',b.dataset.filter);openFilters();}
- else if(b.dataset.paper){if(detectedPaper()!==5012||![5012,5014].includes(+b.dataset.paper))return;state.sixLayout=state.media=+b.dataset.paper;if(state.media===5014&&state.mode==='collage'){state.mode='photo';toast('拼接纸会将前两张照片分别排在上下两幅');}schedule();openPaper();}
+ else if(b.dataset.paper){if(detectedPaper()!==5012||![5012,5014].includes(+b.dataset.paper))return;state.sixLayout=state.media=+b.dataset.paper;if(state.media===5014&&state.mode==='collage'&&state.collageLayout!=='strip'){state.mode='photo';toast('拼接纸会将前两张照片分别排在上下两幅');}schedule();openPaper();}
  else if(b.dataset.history!==undefined){const j=native.history[+b.dataset.history];openSheet('historyDetail','打印记录',`${j.file?`<div class="confirmation-preview"><img data-history-image="0" src="/private/${esc(j.file)}" alt="打印记录"></div>`:''}<p class="hint">${esc(j.message)} · ${PAPER[j.media]?.[0]||'相纸待识别'}${j.filesCleared?' · 打印文件已清理':''}</p>${j.file?`<button class="full-button" id="importHistory" data-src="/private/${esc(j.file)}" data-media="${j.media}" data-orientation="${j.orientation}">作为新照片继续创作</button>`:''}`);fillHistoryPreviews([j]);if(j.canReprint&&j.phase==='done'&&typeof window.Studio?.reprint==='function'){const pages=j.reprintPages||[{copies:j.copies||1}];$('sheetBody').insertAdjacentHTML('beforeend',`<p class="hint">${pages.length} 页 · ${pages.map((p,i)=>`第 ${i+1} 页 ${p.copies} 份`).join('，')}</p><button class="full-button secondary-button" id="reprintOriginal">按原参数重印</button>`);$('reprintOriginal').onclick=async event=>{event.target.disabled=true;try{await reprintOriginal(j);}finally{event.target.disabled=false;}};}}
  else if(b.id==='importHistory'){
   if(state.photos.length>=6){toast('最多 6 张照片，请先移除一张');return;}
@@ -318,6 +319,7 @@ $('sheetBody').addEventListener('click',async e=>{
 });
 $('sheetBody').addEventListener('input',e=>{
  const map={borderInput:'border',gapInput:'gap',monthInput:'month',captionInput:'caption',labelInput:state.mode==='label'?'labelTitle':'cardTitle',subtitleInput:state.mode==='label'?'labelSubtitle':'cardSubtitle'},key=map[e.target.id];if(!key)return;
+ if(key==='border'&&state.mode==='collage'&&state.collageLayout==='strip'){state.stripBorder=+e.target.value;$('borderValue').textContent=(state.stripBorder*25.4/300).toFixed(1)+' mm';schedule();return;}
  if(key==='month'&&!/^\d{4}-\d{2}$/.test(e.target.value))return;
  if(key==='caption'&&active())active().caption=e.target.value;else state[key]=['border','gap'].includes(key)?+e.target.value:e.target.value;
  if(key==='border'&&active()){active().border=state.border;active().facePending=false;}
