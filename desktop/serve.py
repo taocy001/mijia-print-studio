@@ -5,7 +5,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from aiohttp import web
 from printing.service import PrintService
 
-async def run(args):
+async def run(args, *, stop_event=None, on_ready=None):
     core=PrintService(args.data,args.simulate,os.environ.get('MIJIA_BLUETOOTH_ADDRESS'))
     runners=[];bonjour=None;signals=[]
     await core.start(None)
@@ -33,12 +33,13 @@ async def run(args):
                     publisher=Bonjour(adapter,args.printer_name,args.ipp_port)
                 bonjour=asyncio.create_task(publisher.run())
         if args.simulate:print('模拟模式：不会连接打印机或实际打印。',flush=True)
-        stopped=asyncio.Event();loop=asyncio.get_running_loop()
+        stopped=stop_event if stop_event is not None else asyncio.Event();loop=asyncio.get_running_loop()
         for sig in (signal.SIGINT,signal.SIGTERM,*([signal.SIGBREAK] if sys.platform=='win32' else [])):
             if sys.platform=='win32':
                 signals.append((sig,signal.getsignal(sig)))
                 signal.signal(sig,lambda *_:loop.call_soon_threadsafe(stopped.set))
             else:loop.add_signal_handler(sig,stopped.set)
+        if on_ready:on_ready()
         await stopped.wait()
     finally:
         for sig,previous in signals:signal.signal(sig,previous)

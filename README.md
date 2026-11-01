@@ -77,7 +77,13 @@ build/venv/bin/python desktop/serve.py --simulate
 
 使用 Windows 10/11、Python 3.12 64位和支持经典蓝牙的适配器。服务运行于原生Windows，不能在WSL中直接连接打印机；无需安装Mac工具或Android SDK。
 
-在PowerShell进入仓库目录：
+已安装原生 64 位 Python 3.12+（含 Tcl/Tk、pip）后，可双击根目录的 `Start-Windows.cmd`。首次自动准备项目虚拟环境和固定依赖，后续直接打开启动向导；不会修改系统 Python、PATH 或防火墙。需要联网下载首次依赖。
+
+向导可读取已配对打印机、保存蓝牙地址、运行自检并启动服务。默认仅本机访问；勾选局域网共享后填写本机 IPv4 和可信网段。启动后显示 Web 地址与配对码，点击“打开编辑器”继续使用原界面。配置保存在 `%LOCALAPPDATA%\MijiaPrintStudio\launcher.json`，不保存配对码。
+
+“停止服务”或关闭向导会停止接收任务，等待当前任务结束后退出，取消尚未开始的队列；不会强制中断或重印。更新依赖前先停止使用此项目目录的服务。向导不注册开机自启，也不会关掉其他进程。
+
+也可保留原命令行用法。在PowerShell进入仓库目录：
 
 ```powershell
 py -3.12 -m venv build/venv
