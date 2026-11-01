@@ -20,12 +20,12 @@
  bar.addEventListener('pointerdown',e=>{
   if(!e.isPrimary||e.button!==0)return;
   suppress=false;const r=bar.getBoundingClientRect();
-  drag={id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top,moved:false};
+  drag={id:e.pointerId,x:e.clientX,y:e.clientY,left:r.left,top:r.top,moved:false,threshold:e.target.closest('button')?16:8};
  },true);
  bar.addEventListener('pointermove',e=>{
   if(!drag||e.pointerId!==drag.id)return;
   const dx=e.clientX-drag.x,dy=e.clientY-drag.y;
-  if(!drag.moved&&Math.hypot(dx,dy)<8)return;
+  if(!drag.moved&&Math.hypot(dx,dy)<drag.threshold)return;
   drag.moved=true;suppress=true;bar.setPointerCapture(e.pointerId);e.preventDefault();
   peek=false;schedule();bar.classList.add('dragging');
   const p=place(drag.left+dx,drag.top+dy);
