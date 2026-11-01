@@ -1,3 +1,4 @@
+from effect_choices import open_effect_choices
 import subprocess,json,time,io,os,urllib.request
 from pathlib import Path
 from playwright.sync_api import sync_playwright
@@ -33,7 +34,7 @@ with sync_playwright() as p:
  other=browser.new_context(bypass_csp=True);other_page=other.new_page();other_page.goto('http://127.0.0.1:8634/');other_page.locator('input[name=code]').fill(info['code']);other_page.get_by_role('button',name='连接',exact=True).click();other_page.wait_for_function('window.BrowserTransport&&window.TemplateStudio')
  assert other_page.request.get('http://127.0.0.1:8634'+src).status==404
  assert other_page.evaluate('state.photos.length')==0
- page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===TEMPLATE_CATALOG.length");page.locator('[data-template="studio-petal"]').click()
+ open_effect_choices(page, '#templateBtn');page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===TEMPLATE_CATALOG.length");page.locator('[data-template="studio-petal"]').click()
  page.evaluate('confirmPrint()');page.wait_for_selector('#confirmSend');assert page.locator('.print-pages img').count()==1
  page.evaluate('closeSheet()');page.screenshot(path='/tmp/liuying-shared-phone.png')
  page.set_viewport_size({'width':1440,'height':900});page.screenshot(path='/tmp/liuying-shared-desktop.png')

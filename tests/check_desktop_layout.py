@@ -1,3 +1,4 @@
+from effect_choices import open_effect_choices
 from pathlib import Path
 import json,mimetypes
 from urllib.parse import urlparse
@@ -29,13 +30,13 @@ with sync_playwright() as p:
    stage=page.locator('#paperStage').bounding_box()
    assert stage['x']>=workspace['x']-1 and stage['y']>=workspace['y']-1 and stage['y']+stage['height']<=workspace['y']+workspace['height']+1,(workspace,stage)
    for tool in ('layoutBtn','filterBtn','templateBtn','addTextQuick','addEmojiQuick'):
-    page.locator('#'+tool).click()
+    open_effect_choices(page, '#'+tool) if tool in ('filterBtn','templateBtn') else page.locator('#'+tool).click()
     if tool=='templateBtn':page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===TEMPLATE_CATALOG.length")
     panel=page.locator('#sheet').bounding_box();assert panel['x']>=workspace['x']+workspace['width'],panel
     assert page.locator('#scrim').is_hidden()
     assert page.locator('.dock').is_visible()
     assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
-   page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===TEMPLATE_CATALOG.length")
+   open_effect_choices(page, '#templateBtn');page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===TEMPLATE_CATALOG.length")
    page.locator('[data-template="studio-petal"]').click();page.wait_for_function("sheetKind==='templates'&&!document.querySelector('#sheet').hidden")
    page.screenshot(path=f'/tmp/liuying-desktop-{width}-{scheme}.png')
    page.locator('#printBtn').click();page.wait_for_function("sheetKind==='confirm'")
@@ -46,7 +47,7 @@ with sync_playwright() as p:
  assert not page.locator('body').evaluate('(e)=>e.classList.contains("desktop-editor")')
  assert page.locator('#sheet').is_hidden()
  dock=page.locator('.dock').bounding_box();assert dock['y']>750 and dock['width']<=390
- page.locator('#templateBtn').click();assert page.locator('#scrim').is_visible();assert page.locator('#sheet').get_attribute('aria-modal')=='true'
+ open_effect_choices(page, '#templateBtn');assert page.locator('#scrim').is_visible();assert page.locator('#sheet').get_attribute('aria-modal')=='true'
  assert not errors,errors
  print('PASS: desktop two-column width, stable preview, all five nonmodal tools, templates stay open, print modal, mobile resize; no printing')
  b.close()

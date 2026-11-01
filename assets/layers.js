@@ -76,9 +76,9 @@ window.LayerEditor = (() => {
   }
   function refresh(){
     const now=scopeKey();if(scope!==now){if(document.body.classList.contains('layer-editing'))closeSheet();selectedId=null;scope=now;pointers.clear();gestureTarget=null;resizeState=null;previous=null;}
-    const o=selected(),box=$('layerSelection'),handle=$('layerResize');document.body.classList.toggle('object-selected',!!o);
+    const browsing=!!window.EffectBrowser?.active(),o=browsing?null:selected(),box=$('layerSelection'),handle=$('layerResize');document.body.classList.toggle('object-selected',!!o);
     if(o&&editingId===o.id&&document.body.classList.contains('layer-editing')){for(const key of ['sizePct','angle']){const input=$('sheetBody').querySelector('[data-layer-range='+key+']');if(input){input.value=o[key];$('out-'+key).value=Math.round(o[key]);}}}
-    $('layerTools').hidden=!o;$('photoTools').hidden=!!o||!canAdjustPhoto();document.querySelector('.photo-tools').hidden=!ready()||(!o&&!canAdjustPhoto());document.querySelector('.photo-tools').setAttribute('aria-label',o?'文字与表情快捷工具':'照片快捷工具');$('layerName').textContent=o?((o.hidden?'覆膜 · ':'')+(o.kind==='qr'?'已选二维码':o.kind==='emoji'?'已选表情':'已选文字')):'';
+    $('layerTools').hidden=!o;$('photoTools').hidden=browsing||!!o||!canAdjustPhoto();document.querySelector('.photo-tools').hidden=!ready()||(!browsing&&!o&&!canAdjustPhoto());document.querySelector('.photo-tools').setAttribute('aria-label',o?'文字与表情快捷工具':'照片快捷工具');$('layerName').textContent=o?((o.hidden?'覆膜 · ':'')+(o.kind==='qr'?'已选二维码':o.kind==='emoji'?'已选表情':'已选文字')):'';
     box.hidden=handle.hidden=!o||peek||!readyPhoto();
     if(!o||peek||!readyPhoto())return;
     const [w,h]=layerSize(),m=metrics(o,w,h),rect=$('preview').getBoundingClientRect(),view=window.CropEditor?.geometry()||{tx:0,ty:0},origin=space(),scale=rect.width/$('preview').width;
@@ -125,18 +125,18 @@ window.LayerEditor = (() => {
   function point(e){const p=CropEditor.toPaper(e),s=space();return{x:p.x-s.x,y:p.y-s.y};}
   function geometry(){const p=[...pointers.values()];if(!p.length)return null;return p.length===1?{x:p[0].x,y:p[0].y,d:0,a:0,n:1}:{x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2,d:Math.hypot(p[1].x-p[0].x,p[1].y-p[0].y),a:Math.atan2(p[1].y-p[0].y,p[1].x-p[0].x),n:2};}
   const selection=$('layerSelection');
-  selection.onpointerdown=e=>{if(peek)return;e.preventDefault();const p=point(e);if(!pointers.size){const o=selected()||hit(p.x,p.y),had=selected();gestureTarget=o||(!had?'photo':null);select(o?.id||null);moved=false;}pointers.set(e.pointerId,p);selection.setPointerCapture(e.pointerId);previous=geometry();};
-  selection.onpointermove=e=>{if(!pointers.has(e.pointerId))return;e.preventDefault();pointers.set(e.pointerId,point(e));const g=geometry(),old=previous;previous=g;if(!old||!gestureTarget)return;const [w,h]=layerSize(),dx=g.x-old.x,dy=g.y-old.y;if(Math.abs(dx)+Math.abs(dy)>2||g.n===2)moved=true;
+  selection.onpointerdown=e=>{if(window.EffectBrowser?.active()||peek)return;e.preventDefault();const p=point(e);if(!pointers.size){const o=selected()||hit(p.x,p.y),had=selected();gestureTarget=o||(!had?'photo':null);select(o?.id||null);moved=false;}pointers.set(e.pointerId,p);selection.setPointerCapture(e.pointerId);previous=geometry();};
+  selection.onpointermove=e=>{if(window.EffectBrowser?.active())return;if(!pointers.has(e.pointerId))return;e.preventDefault();pointers.set(e.pointerId,point(e));const g=geometry(),old=previous;previous=g;if(!old||!gestureTarget)return;const [w,h]=layerSize(),dx=g.x-old.x,dy=g.y-old.y;if(Math.abs(dx)+Math.abs(dy)>2||g.n===2)moved=true;
     if(gestureTarget==='photo'){const p=active();if(!p)return;p.x=Math.max(-1,Math.min(1,(p.x||0)+dx/w*2));p.y=Math.max(-1,Math.min(1,(p.y||0)+dy/h*2));if(g.n===2&&old.n===2&&old.d)p.zoom=Math.max(1,Math.min(4,(p.zoom||1)*g.d/old.d));}
     else {const o=gestureTarget,m=metrics(o,w,h);o.fx=(m.x+dx)/w;o.fy=(m.y+dy)/h;if(g.n===2&&old.n===2&&old.d){o.sizePct=Math.max(2,Math.min(o.kind==='qr'?80:32,o.sizePct*g.d/old.d));o.angle=o.kind==='qr'?0:((o.angle+(g.a-old.a)*180/Math.PI+540)%360)-180;}constrain(o);}schedule();};
   function end(e){if(!pointers.has(e.pointerId))return;pointers.delete(e.pointerId);previous=geometry();if(!pointers.size){if(e.type==='pointerup'&&!moved&&selected()){const now=Date.now();if(lastTap?.id===selectedId&&now-lastTap.time<350){openEditor(selected());lastTap=null;}else lastTap={id:selectedId,time:now};}gestureTarget=null;}}
   selection.onpointerup=end;selection.onpointercancel=end;selection.onlostpointercapture=end;
   let tap=null;
-  canvas.onpointerdown=e=>{tap=e.isPrimary?{id:e.pointerId,x:e.clientX,y:e.clientY}:null;};
+  canvas.onpointerdown=e=>{if(window.EffectBrowser?.active()){tap=null;return;}tap=e.isPrimary?{id:e.pointerId,x:e.clientX,y:e.clientY}:null;};
   canvas.onpointermove=e=>{if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>8)tap=null;};
   canvas.onpointercancel=()=>tap=null;
-  canvas.onpointerup=e=>{if(!tap||tap.id!==e.pointerId)return;tap=null;const p=point(e),o=hit(p.x,p.y);select(o?.id||null);};
-  const handle=$('layerResize');handle.onpointerdown=e=>{e.preventDefault();e.stopPropagation();const o=selected();if(!o)return;const [w,h]=layerSize(),m=metrics(o,w,h),p=point(e);resizeState={o,d:Math.max(1,Math.hypot(p.x-m.x,p.y-m.y)),size:o.sizePct};handle.setPointerCapture(e.pointerId);};handle.onpointermove=e=>{if(!resizeState)return;e.preventDefault();const {o,d,size}=resizeState,[w,h]=layerSize(),m=metrics(o,w,h),p=point(e);o.sizePct=Math.max(2,Math.min(o.kind==='qr'?80:32,size*Math.hypot(p.x-m.x,p.y-m.y)/d));constrain(o);schedule();};for(const event of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(event,()=>resizeState=null);
+  canvas.onpointerup=e=>{if(window.EffectBrowser?.active()){tap=null;return;}if(!tap||tap.id!==e.pointerId)return;tap=null;const p=point(e),o=hit(p.x,p.y);select(o?.id||null);};
+  const handle=$('layerResize');handle.onpointerdown=e=>{if(window.EffectBrowser?.active())return;e.preventDefault();e.stopPropagation();const o=selected();if(!o)return;const [w,h]=layerSize(),m=metrics(o,w,h),p=point(e);resizeState={o,d:Math.max(1,Math.hypot(p.x-m.x,p.y-m.y)),size:o.sizePct};handle.setPointerCapture(e.pointerId);};handle.onpointermove=e=>{if(window.EffectBrowser?.active())return;if(!resizeState)return;e.preventDefault();const {o,d,size}=resizeState,[w,h]=layerSize(),m=metrics(o,w,h),p=point(e);o.sizePct=Math.max(2,Math.min(o.kind==='qr'?80:32,size*Math.hypot(p.x-m.x,p.y-m.y)/d));constrain(o);schedule();};for(const event of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(event,()=>resizeState=null);
   document.addEventListener('keydown',e=>{
     if(!['Delete','Backspace'].includes(e.key)||e.isComposing||e.ctrlKey||e.metaKey||e.altKey)return;
     if(e.target.closest?.('input,textarea,select,[contenteditable]')||(!$('sheet').hidden&&!$('sheet').classList.contains('desktop-inspector'))||!selected())return;

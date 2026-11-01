@@ -1,3 +1,4 @@
+from effect_choices import open_effect_choices
 """Exercise the desktop backend in explicit simulation mode."""
 from pathlib import Path
 import base64,io,json,os,socket,subprocess,sys,tempfile,time,urllib.request
@@ -26,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix='liuying-desktop-test-') as folder:
    assert other.request.get(url+src).status==404
    assert ctx.request.post(url+'/api/cancel',data='{}',headers={'Origin':'http://evil.invalid'}).status==403
    assert ctx.request.get(url+'/README.md').status==404
-   page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===TEMPLATE_CATALOG.length");page.locator('[data-template="studio-petal"]').click();page.evaluate('BrowserTransport.refresh()');page.locator('#printBtn').click();page.locator('#confirmSend').click();page.wait_for_function("sheetKind!=='confirm'")
+   open_effect_choices(page, '#templateBtn');page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===TEMPLATE_CATALOG.length");page.locator('[data-template="studio-petal"]').click();page.evaluate('BrowserTransport.refresh()');page.locator('#printBtn').click();page.locator('#confirmSend').click();page.wait_for_function("sheetKind!=='confirm'")
    for _ in range(40):
     state=ctx.request.get(url+'/api/state').json()
     if state['job'].get('phase')=='done':break

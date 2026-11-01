@@ -1,3 +1,4 @@
+from effect_choices import open_effect_choices
 from playwright.sync_api import sync_playwright
 from pathlib import Path
 from urllib.parse import urlparse,unquote
@@ -23,7 +24,7 @@ with sync_playwright() as p:
  assert page.evaluate('TEMPLATE_CATALOG.every(t=>t.original&&!t.bg&&!t.landscape.bg)')
  for direction in ['portrait','landscape']:
   page.evaluate('(d)=>{state.orientation=d;state.mode="photo";render()}',direction)
-  page.locator('#templateBtn').click()
+  open_effect_choices(page, '#templateBtn')
   page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===TEMPLATE_CATALOG.length")
   assert page.locator('#noTemplate').get_attribute('aria-pressed')=='true'
   page.locator('[data-template="studio-petal"]').click()
