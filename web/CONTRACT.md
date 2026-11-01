@@ -42,6 +42,8 @@ Android App 内主动开启同一 Wi-Fi 共享，本机直接使用 App。
 
 电脑端另提供 `GET /api/models`，返回模型文件状态、推理运行库是否可导入及 `canManage`。`POST /api/admin/models` 接收 `{id:"face"}` 或 `{id:"cutout"}`，仅已配对的本机回环客户端可用；返回 202 后通过状态接口查看进度。同模型重复请求合并，失败可重试，关闭服务取消下载并清理临时文件。仅下载固定来源、校验和及大小限制内的模型，不接受 URL 或路径；Android 不提供这两个接口。
 
+电脑端 `POST /api/history/storage` 返回本人可清理的打印文件数量与字节数；`POST /api/history/clear` 需 `{confirmed:true,keepFiles:[]}`。`keepFiles` 可携带当前页面使用的历史图片 URL，整批保护；不覆盖其他页面未提交的草稿。仅清理已结束作品文件，保留请求幂等记录；已清理作品返回 `filesCleared:true`，不能预览和重印，失败删除可重试。
+
 ## 平台差异
 
 共用编辑器、Android 承载 Web、电脑 Web、AirPrint 与蓝牙后端已进入同一仓库。

@@ -18,7 +18,7 @@ def atomic(path,value):
 class PrintService:
     def __init__(self,data,simulate=False,address=None):
         self.data=Path(data);self.data.mkdir(parents=True,exist_ok=True,mode=0o700);self.simulate=simulate;self.address=address
-        self.released=False;self.airprint_splice=False;self.device={};self.queue=asyncio.Queue();self.io_lock=asyncio.Lock();self.lock=asyncio.Lock();self.paused=False;self.cancel_flags={};self.device_printer=None;self._active_job=None;self._batch_verified=False
+        self.released=False;self.airprint_splice=False;self.device={};self.queue=asyncio.Queue();self.io_lock=asyncio.Lock();self.lock=asyncio.Lock();self.history_lock=asyncio.Lock();self.paused=False;self.cancel_flags={};self.device_printer=None;self._active_job=None;self._batch_verified=False
         self._locks=[];self._save_lock=threading.RLock()
         self._acquire(self.data/'service.lock')
         if not simulate:
@@ -201,7 +201,9 @@ class PrintService:
         pages=job.get('pages',[])
         if type(index) is int and 0<=index<len(pages):
             result['previewPage']={k:pages[index][k] for k in ('file','media','orientation') if k in pages[index]}
-        result['canReprint']=job.get('phase')=='done' and bool(job.get('pages'))
+        if job.get('filesCleared'):
+            result.pop('file',None);result.pop('previewPage',None);result['filesCleared']=True
+        result['canReprint']=not job.get('filesCleared') and job.get('phase')=='done' and bool(job.get('pages'))
         if result['canReprint']:result['reprintPages']=[{k:p[k] for k in ('copies','media') if k in p} for p in job['pages']]
         return result
     async def submit(self,session,body,*,prepared_files=None):
@@ -229,10 +231,33 @@ class PrintService:
                 if job is not None and job in self.jobs:self.jobs.remove(job)
                 for file in files:file.unlink(missing_ok=True)
                 raise
+    async def history_cleanup(self,session,body):
+        from .history import clear
+        if body.get('confirmed') is not True:raise UserError('请确认清理历史打印文件')
+        keep=self.history_keep(body)
+        async with self.history_lock:
+            async with self.lock:
+                if self.io_lock.locked():raise UserError('设备正在工作，请稍后清理')
+                async with self.io_lock:
+                    return clear(self,session['id'],keep)
+    @staticmethod
+    def history_keep(body):
+        keep=body.get('keepFiles',[])
+        if not isinstance(keep,list) or len(keep)>32 or any(not isinstance(n,str) or not re.fullmatch(r'/private/prints/[0-9a-f-]+\.jpg',n) for n in keep):raise UserError('草稿引用无效')
+        return {name[9:] for name in keep}
+    async def history_storage(self,session,body):
+        from .history import plan
+        keep=self.history_keep(body)
+        async with self.history_lock:
+            snapshot=json.loads(json.dumps(self.jobs))
+            return (await asyncio.to_thread(plan,self.data,snapshot,session['id'],keep))[2]
     async def reprint(self,session,body):
+        async with self.history_lock:
+            return await self._reprint(session,body)
+    async def _reprint(self,session,body):
         if body.get('confirmed') is not True:raise UserError('请确认按原参数重新打印')
         source=next((j for j in self.jobs if j['owner']==session['id'] and j.get('token')==body.get('token')),None)
-        if source is None or source['phase']!='done' or not source.get('pages'):raise UserError('只能重印本人的已完成作品')
+        if source is None or source.get('filesCleared') or source['phase']!='done' or not source.get('pages'):raise UserError('只能重印本人的已完成作品')
         def load():
             pages=[];prepared=[]
             for original in source['pages']:
