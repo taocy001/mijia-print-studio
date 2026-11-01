@@ -46,5 +46,12 @@ with sync_playwright() as p:
  page.wait_for_timeout(300);assert page.locator('#connectNow').is_disabled()
  page.locator('#connectNow').dispatch_event('click');assert page.evaluate('calls')==before+1
  page.evaluate('deviceState.busy=false;poll()');assert page.locator('#connectNow').is_enabled()
+ page.evaluate('''async()=>{closeSheet();deviceState={permission:true,device:{},history:[]};state.media=5009;Studio.connect=()=>{calls++;deviceState.device={connected:true,media:5009,checkedAt:Date.now()};};poll();await addPhotos([{src:'/sample.svg'}]);await confirmPrint();}''')
+ assert page.locator('#connectBeforePrint').is_visible()
+ before=page.evaluate('calls');page.locator('#connectBeforePrint').click();page.wait_for_timeout(350)
+ assert page.evaluate("sheetKind==='confirm'") and page.locator('#confirmSend').is_enabled()
+ assert not page.locator('#connectBeforePrint').is_visible() and page.evaluate('calls')==before+1
+ page.evaluate('closeSheet();confirmPrint()');assert page.locator('#confirmSend').is_enabled()
+ assert not page.locator('#connectBeforePrint').is_visible() and page.evaluate('calls')==before+1
  assert not errors,errors
  browser.close();print('PASS: three detection entries, light/dark styles, pending/busy locks, retry and navigation; no printing')
