@@ -42,7 +42,7 @@ window.EffectBrowser=(()=>{
  }
  function exit(restore=true){
   clearTimeout(activationTimer);activationTimer=0;lastActivation=null;
-  if(!mode)return;const old=mode;mode='';photo=null;gesture=mouse=null;animation?.cancel();animation=null;
+  if(!mode)return;const old=mode;save();mode='';photo=null;gesture=mouse=null;animation?.cancel();animation=null;
   document.body.classList.remove('effect-browsing');group.hidden=true;canvas.setAttribute('aria-label',originalLabel);CropEditor.resetGesture();LayerEditor.refresh();
   for(const id of ['layoutBtn','filterBtn','templateBtn'])$(id).setAttribute('aria-pressed','false');
   if(restore&&(sheetKind===old||!sheetKind))closeSheet();
@@ -67,7 +67,7 @@ window.EffectBrowser=(()=>{
   const double=pointer&&((lastActivation?.kind===next&&now-lastActivation.at<300)||event.detail===2);
   if(double){
    lastActivation=null;
-   if(mode!==next)toggle(next);else{closeSheet();CropEditor.render();refresh();focus();}
+   toggle(next);
    return;
   }
   lastActivation=pointer?{kind:next,at:now}:null;
