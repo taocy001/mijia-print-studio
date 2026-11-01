@@ -124,6 +124,8 @@ AirPrint 支持 JPEG、PDF、单页 URF/PWG；PDF 最多六页，拼接只支持
 
 Mac 可提取照片型 PDF；Android / Windows PDF 完整保留整页。两端图像编码不同，不承诺逐像素相同。导入图像最长边 2400，极端放大可能损失细节。
 
+电脑端可在“更多 → 离线模型”查看校验状态。本机网页可下载或重试人脸裁切、抠图模型；局域网客户端只读。下载需联网，通过固定校验和后安装，照片不上传。运行库缺失时需重新安装项目依赖。Android 模型随 APK 打包，无需下载。
+
 ## 开发与测试
 
 `assets/` 是唯一编辑器与合成代码；`src/` 为 Android 适配；`printing/` 为桌面公共队列；Web 与 AirPrint 入口不互相依赖。接口见 [web/CONTRACT.md](web/CONTRACT.md)。

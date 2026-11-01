@@ -6,6 +6,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from printing.images import decode,cutout,UserError
 from printing.faces import detect_faces
+from printing.models import ModelStore
 from printing.service import PrintService,atomic
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -16,7 +17,7 @@ class Studio:
         self.core=core or PrintService(data,simulate,address)
         self.owns_core=core is None
         self.lan=lan;self.airprint=airprint;self.address_cache=[];self.address_checked=0
-        self.data=self.core.data;self.simulate=self.core.simulate
+        self.data=self.core.data;self.simulate=self.core.simulate;self.models=ModelStore()
         try:self.owners=json.loads((self.data/'web-owners.json').read_text())
         except FileNotFoundError:self.owners={}
         self.code=f'{secrets.randbelow(1000000):06}';self.sessions={};self.failures=0;self.blocked_until=0
@@ -26,6 +27,7 @@ class Studio:
     async def start(self,app):
         if self.owns_core:await self.core.start(app)
     async def stop(self,app):
+        await self.models.close()
         if self.owns_core:await self.core.stop(app)
     async def handle(self,r):
         if r.method not in ('GET','POST'):raise web.HTTPMethodNotAllowed(r.method,['GET','POST'])
@@ -57,6 +59,7 @@ class Studio:
         can_manage=bool(peer and ipaddress.ip_address(peer[0]).is_loopback)
         if r.path.startswith('/api/admin/') and not can_manage:raise web.HTTPForbidden()
         if r.method=='GET':
+            if r.path=='/api/models':return web.json_response(dict(await self.models.status(),canManage=can_manage))
             if r.path=='/api/admin/queue':
                 jobs=[{k:v for k,v in self.core.public(j).items() if k not in ('file','previewPage')} for j in reversed(self.core.jobs)]
                 return web.json_response({'jobs':jobs[:100]})
@@ -93,6 +96,8 @@ class Studio:
         raw=await r.read()
         if len(raw)>(18000000 if r.path=='/api/print' else 4096):raise UserError('请求过大')
         body=json.loads(raw)
+        if r.path=='/api/admin/models':
+            self.models.start(body.get('id'));return web.json_response({'ok':True},status=202)
         if r.path=='/api/print':
             result=await self.core.submit(session,body);return web.json_response(result)
         if r.path=='/api/reprint':return web.json_response(await self.core.reprint(session,body))

@@ -51,7 +51,7 @@ def page_files(page):
 def cutout(source,directory,model):
     import numpy as np
     import onnxruntime as ort
-    if not model.is_file():raise UserError('请先下载离线模型：python3 fetch_deps.py')
+    if not model.is_file():raise UserError('请在电脑本机的“更多 → 离线模型”下载抠图模型')
     data=source.read_bytes();key='u2netp-v1-'+hashlib.sha256(data).hexdigest();outputs={c:directory/(key+'-'+c+'.jpg') for c in ['white','blue','red']}
     if all(p.is_file() for p in outputs.values()):return outputs
     photo=Image.open(io.BytesIO(data)).convert('RGB');small=np.asarray(photo.resize((320,320),Image.Resampling.BILINEAR),dtype=np.float32)
