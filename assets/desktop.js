@@ -6,7 +6,7 @@
  const settings=new Set(['menu','device','paper','sharing','coat','workType','history','historyDetail','hostQueue','job','models','qr','camera']);
  const back=$('settingsBack');
  const panels={layout:()=>openLayout(),filters:()=>openFilters(),templates:()=>TemplateStudio.open()};
- function refresh(){cancelAnimationFrame(restore);restore=requestAnimationFrame(()=>{if(media.matches&&sheet.hidden&&!window.EffectBrowser?.active())panels[last]?.();});}
+ function refresh(){cancelAnimationFrame(restore);restore=requestAnimationFrame(()=>{if(media.matches&&sheet.hidden&&!window.EffectBrowser?.active()&&!window.EffectBrowser?.pending())panels[last]?.();});}
  window.openSheet=function(kind,...args){
   cancelAnimationFrame(restore);open(kind,...args);
   const inline=media.matches&&['layout','filters','templates','layers','text'].includes(kind);
@@ -19,5 +19,6 @@
  const select=selectPhoto;
  window.selectPhoto=function(index){select(index);if(media.matches&&sheet.classList.contains('desktop-inspector')&&panels[sheetKind])panels[sheetKind]();};
  function resize(){document.body.classList.toggle('desktop-editor',media.matches);cancelAnimationFrame(restore);sheet.classList.remove('desktop-inspector','desktop-settings');back.hidden=true;if(media.matches){if(sheet.hidden&&!window.EffectBrowser?.active())openLayout();else if(panels[sheetKind])panels[sheetKind]();else if(settings.has(sheetKind)){sheet.classList.add('desktop-settings');back.hidden=sheetKind==='menu';}}else if(!sheet.hidden){close();}requestAnimationFrame(()=>{CropEditor.render();LayerEditor.refresh();});}
+ window.addEventListener('editor-activation-cancelled',refresh);
  media.addEventListener('change',resize);resize();
 })();

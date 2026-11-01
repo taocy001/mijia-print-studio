@@ -44,7 +44,7 @@ with sync_playwright() as p:
     assert choice.get_attribute('aria-pressed')=='true' and page.locator('[data-emoji][aria-pressed=true]').count()==1
     assert page.evaluate('JSON.stringify(active().overlays.map(({id,fx,fy,sizePct,angle})=>({id,fx,fy,sizePct,angle})))')==identity
    page.locator('#emojiHidden').check();assert page.evaluate('active().overlays[0].hidden')
-   close_panel();page.locator('#addEmojiQuick').click();page.locator('[data-emoji]').first.click();assert page.evaluate("sheetKind!=='layers'&&active().overlays.length===2")
+   close_panel();page.locator('#addEmojiQuick').click();page.wait_for_function("sheetKind==='layers'&&!$('sheet').hidden&&$('sheetTitle').textContent==='选择表情'&&!document.querySelector('[data-emoji][aria-pressed]')");page.locator('[data-emoji]').first.click();assert page.evaluate("sheetKind!=='layers'&&active().overlays.length===2")
    assert not errors,errors
    page.close()
  browser.close()

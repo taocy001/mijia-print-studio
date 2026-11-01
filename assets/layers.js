@@ -3,22 +3,37 @@ window.LayerEditor = (() => {
   const FONTS = {sans:['简洁','sans-serif'],happy:['快乐体','StudioHappy'],brush:['毛笔体','StudioBrush'],serif:['衬线','serif']};
   const COLORS = ['#ffffff','#203d33','#111111','#e65a62','#dc954a','#eac859','#589568','#5297ba','#9470b5'];
   const EMOJI=Object.fromEntries(Object.entries(SHARED_EMOJI).map(([k,items])=>[k,items.map(x=>[x.text,x.name])]));
+  // Editor-only rasters: keep logical geometry and full-resolution print masks unchanged.
+  const previewMasks=new Map();let resourceRevision=0;
+  function resourcesChanged(){resourceRevision++;previewMasks.clear();schedule();}
   const emojiImages=new Map(),emojiCodes=new Map();
-  const emojiReady=Promise.all(Object.values(SHARED_EMOJI).flat().map(async item=>{const im=new Image();im.src='/emoji/'+item.code+'.svg';await im.decode();emojiImages.set(item.text.replaceAll('\ufe0f',''),im);emojiCodes.set(item.text,item.code);}));
+  const emojiReady=Promise.all(Object.values(SHARED_EMOJI).flat().map(async item=>{const im=new Image();im.src='/emoji/'+item.code+'.svg';await im.decode();emojiImages.set(item.text.replaceAll('\ufe0f',''),im);emojiCodes.set(item.text,item.code);resourcesChanged();}));
   let editingId=null,selectedId=null,scope='',emojiTab='心情',lastTap=null,resizeState=null,undoTimer;
+  const recentObjects=new WeakMap();
   const pointers=new Map(); let gestureTarget=null,previous=null,moved=false;
   const measureContext=document.createElement('canvas').getContext('2d');
-  const fontReady=Promise.all([document.fonts.load('20px StudioHappy'),document.fonts.load('20px StudioBrush')]).then(()=>{schedule();});
+  const fontReady=Promise.all([document.fonts.load('20px StudioHappy'),document.fonts.load('20px StudioBrush')]).then(resourcesChanged);
   function list(){
     if(!['label','card'].includes(state.mode)&&!(state.mode==='calendar'&&(state.calendarLayout==='plain'||state.media===5014))&&active())return active().overlays ||= [];
     state.sceneLayers ||= {};return state.sceneLayers[state.mode] ||= [];
   }
   function scopeKey(){return (['label','card'].includes(state.mode)||(state.mode==='calendar'&&(state.calendarLayout==='plain'||state.media===5014)))?'scene:'+state.mode:'photo:'+state.active+':'+(active()?.src||'');}
+  function recentOwner(){return scopeKey().startsWith('scene:')?list():(active()||list());}
+  function remember(o){if(!o||!['text','emoji'].includes(o.kind))return;const owner=recentOwner(),recent=recentObjects.get(owner)||{};recent[o.kind]=o.id;recentObjects.set(owner,recent);}
+  function activate(kind,{resume=false}={}){
+    if(!['text','emoji'].includes(kind)||!readyPhoto())return;
+    window.EffectBrowser?.exit(false);
+    if(!resume){if(kind==='emoji')return openEmoji();if(['label','card'].includes(state.mode))return openLegacyText();return openEditor();}
+    const items=list(),chosen=scope===scopeKey()?selected():null,id=recentObjects.get(recentOwner())?.[kind];
+    const target=chosen?.kind===kind?chosen:items.find(o=>o.id===id&&o.kind===kind)||[...items].reverse().find(o=>o.kind===kind);
+    if(target)openEditor(target);else if(kind==='emoji')openEmoji();else openEditor();
+    if(kind==='text'){const input=$('layerText');if(input){input.focus({preventScroll:true});input.setSelectionRange(input.value.length,input.value.length);}}
+  }
   function space(){const [w,h]=logicalSize();if(state.media===5014||state.mode==='collage'){const f=photoFrames.find(f=>f.p===active());if(f)return {x:f.x,y:f.y,w:f.w,h:f.h};}return{x:0,y:0,w,h};}
   function layerSize(){const s=space();return[s.w,s.h];}
   function selected(){return list().find(o=>o.id===selectedId)||null;}
   function uid(){return 'layer-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,8);}
-  function select(id){const switchEditor=document.body.classList.contains('layer-editing')&&editingId&&id!==editingId;selectedId=id;scope=scopeKey();if(switchEditor){editingId=null;const o=selected();if(o)openEditor(o);else closeSheet();}refresh();}
+  function select(id){const switchEditor=document.body.classList.contains('layer-editing')&&editingId&&id!==editingId;selectedId=id;scope=scopeKey();remember(selected());if(switchEditor){editingId=null;const o=selected();if(o)openEditor(o);else closeSheet();}refresh();}
   function characters(value){return typeof Intl.Segmenter==='function'?[...new Intl.Segmenter('zh',{granularity:'grapheme'}).segment(value)].map(s=>s.segment):Array.from(value);}
   function metrics(o,w,h){
     const font=(FONTS[o.font]||FONTS.sans)[1];let size=Math.max(2,Math.min(32,Number(o.sizePct)||9))*w/100;
@@ -46,13 +61,21 @@ window.LayerEditor = (() => {
       const hidden=objects.filter(o=>o.hidden&&o.kind!=='qr');
       if(mode==='editor')paint(ctx,w,h,objects,'photo');
       if(!hidden.length)return;
-      const mask=document.createElement('canvas');mask.width=w;mask.height=h;
-      const mc=mask.getContext('2d');paint(mc,w,h,hidden.map(o=>({...o,hidden:false,color:'#fff',stroke:'',bubble:''})),'photo');
-      // Keep dark eyes/mouth as holes instead of flattening every emoji to a disc.
-      const pixels=mc.getImageData(0,0,w,h);let bright=0;
-      for(let i=0;i<pixels.data.length;i+=4)if(pixels.data[i+3]&&(.299*pixels.data[i]+.587*pixels.data[i+1]+.114*pixels.data[i+2])>=40)bright++;
-      for(let i=0;i<pixels.data.length;i+=4){if(bright&&(.299*pixels.data[i]+.587*pixels.data[i+1]+.114*pixels.data[i+2])<40)pixels.data[i+3]=0;pixels.data[i]=mode==='mask'?255:233;pixels.data[i+1]=mode==='mask'?255:196;pixels.data[i+2]=mode==='mask'?255:106;}mc.putImageData(pixels,0,0);
-      ctx.save();ctx.globalAlpha=mode==='mask'?1:.65;ctx.drawImage(mask,0,0);ctx.restore();return;
+      const key=mode==='editor'?JSON.stringify([w,h,resourceRevision,!!peek,hidden]):null;
+      let mask=key&&previewMasks.get(key);
+      if(mask){previewMasks.delete(key);previewMasks.set(key,mask);}
+      else{
+        const scale=mode==='editor'?Math.min(1,1024/Math.max(w,h)):1;
+        mask=document.createElement('canvas');mask.width=mode==='mask'?w:Math.max(1,Math.round(w*scale));mask.height=mode==='mask'?h:Math.max(1,Math.round(h*scale));
+        const mc=mask.getContext('2d');if(mode==='editor')mc.scale(mask.width/w,mask.height/h);
+        paint(mc,w,h,hidden.map(o=>({...o,hidden:false,color:'#fff',stroke:'',bubble:''})),'photo');
+        // Keep dark eyes/mouth as holes instead of flattening every emoji to a disc.
+        const pixels=mc.getImageData(0,0,mask.width,mask.height);let bright=0;
+        for(let i=0;i<pixels.data.length;i+=4)if(pixels.data[i+3]&&(.299*pixels.data[i]+.587*pixels.data[i+1]+.114*pixels.data[i+2])>=40)bright++;
+        for(let i=0;i<pixels.data.length;i+=4){if(bright&&(.299*pixels.data[i]+.587*pixels.data[i+1]+.114*pixels.data[i+2])<40)pixels.data[i+3]=0;pixels.data[i]=mode==='mask'?255:233;pixels.data[i+1]=mode==='mask'?255:196;pixels.data[i+2]=mode==='mask'?255:106;}mc.putImageData(pixels,0,0);
+        if(key){previewMasks.set(key,mask);while(previewMasks.size>2)previewMasks.delete(previewMasks.keys().next().value);}
+      }
+      ctx.save();ctx.globalAlpha=mode==='mask'?1:.65;if(mode==='mask')ctx.drawImage(mask,0,0);else ctx.drawImage(mask,0,0,w,h);ctx.restore();return;
     }
     if(peek)return;
     for(const o of objects){
@@ -126,18 +149,24 @@ window.LayerEditor = (() => {
   function point(e){const p=CropEditor.toPaper(e),s=space();return{x:p.x-s.x,y:p.y-s.y};}
   function geometry(){const p=[...pointers.values()];if(!p.length)return null;return p.length===1?{x:p[0].x,y:p[0].y,d:0,a:0,n:1}:{x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2,d:Math.hypot(p[1].x-p[0].x,p[1].y-p[0].y),a:Math.atan2(p[1].y-p[0].y,p[1].x-p[0].x),n:2};}
   const selection=$('layerSelection');
-  selection.onpointerdown=e=>{if(window.EffectBrowser?.active()||peek)return;e.preventDefault();const p=point(e);if(!pointers.size){const o=selected()||hit(p.x,p.y),had=selected();gestureTarget=o||(!had?'photo':null);select(o?.id||null);moved=false;}pointers.set(e.pointerId,p);selection.setPointerCapture(e.pointerId);previous=geometry();};
-  selection.onpointermove=e=>{if(window.EffectBrowser?.active())return;if(!pointers.has(e.pointerId))return;e.preventDefault();pointers.set(e.pointerId,point(e));const g=geometry(),old=previous;previous=g;if(!old||!gestureTarget)return;const [w,h]=layerSize(),dx=g.x-old.x,dy=g.y-old.y;if(Math.abs(dx)+Math.abs(dy)>2||g.n===2)moved=true;window.EditHistory?.begin(gestureTarget==='photo'?'gesture':'layer-gesture');
+  selection.onpointerdown=e=>{if(window.EffectBrowser?.active()||peek)return;e.preventDefault();if(pointers.size){moved=true;lastTap=null;}const p=point(e);if(!pointers.size){const o=selected()||hit(p.x,p.y),had=selected();gestureTarget=o||(!had?'photo':null);select(o?.id||null);moved=false;}pointers.set(e.pointerId,p);selection.setPointerCapture(e.pointerId);previous=geometry();};
+  selection.onpointermove=e=>{if(window.EffectBrowser?.active())return;if(!pointers.has(e.pointerId))return;e.preventDefault();pointers.set(e.pointerId,point(e));const g=geometry(),old=previous;previous=g;if(!old||!gestureTarget)return;const [w,h]=layerSize(),dx=g.x-old.x,dy=g.y-old.y;if(Math.abs(dx)+Math.abs(dy)>2||g.n===2){moved=true;lastTap=null;}window.EditHistory?.begin(gestureTarget==='photo'?'gesture':'layer-gesture');
     if(gestureTarget==='photo'){const p=active();if(!p)return;p.x=Math.max(-1,Math.min(1,(p.x||0)+dx/w*2));p.y=Math.max(-1,Math.min(1,(p.y||0)+dy/h*2));if(g.n===2&&old.n===2&&old.d)p.zoom=Math.max(1,Math.min(4,(p.zoom||1)*g.d/old.d));}
     else {const o=gestureTarget,m=metrics(o,w,h);o.fx=(m.x+dx)/w;o.fy=(m.y+dy)/h;if(g.n===2&&old.n===2&&old.d){o.sizePct=Math.max(2,Math.min(o.kind==='qr'?80:32,o.sizePct*g.d/old.d));o.angle=o.kind==='qr'?0:((o.angle+(g.a-old.a)*180/Math.PI+540)%360)-180;}constrain(o);}schedule();};
-  function end(e){if(!pointers.has(e.pointerId))return;pointers.delete(e.pointerId);previous=geometry();if(!pointers.size){window.EditHistory?.commit();if(e.type==='pointerup'&&!moved&&selected()){const now=Date.now();if(lastTap?.id===selectedId&&now-lastTap.time<350){openEditor(selected());lastTap=null;}else lastTap={id:selectedId,time:now};}gestureTarget=null;}}
+  function tapObject(o){
+    if(!o){lastTap=null;return;}
+    const now=Date.now(),owner=recentOwner(),currentScope=scopeKey();
+    if(lastTap?.id===o.id&&lastTap.owner===owner&&lastTap.scope===currentScope&&now-lastTap.time<350){lastTap=null;openEditor(o);}
+    else lastTap={id:o.id,time:now,owner,scope:currentScope};
+  }
+  function end(e){if(!pointers.has(e.pointerId))return;pointers.delete(e.pointerId);previous=geometry();if(!pointers.size){window.EditHistory?.commit();if(e.type==='pointerup'&&!moved)tapObject(selected());else lastTap=null;gestureTarget=null;}}
   selection.onpointerup=end;selection.onpointercancel=end;selection.onlostpointercapture=end;
   let tap=null;
-  canvas.onpointerdown=e=>{if(window.EffectBrowser?.active()){tap=null;return;}tap=e.isPrimary?{id:e.pointerId,x:e.clientX,y:e.clientY}:null;};
-  canvas.onpointermove=e=>{if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>8)tap=null;};
-  canvas.onpointercancel=()=>tap=null;
-  canvas.onpointerup=e=>{if(window.EffectBrowser?.active()){tap=null;return;}if(!tap||tap.id!==e.pointerId)return;tap=null;const p=point(e),o=hit(p.x,p.y);select(o?.id||null);};
-  const handle=$('layerResize');handle.onpointerdown=e=>{if(window.EffectBrowser?.active())return;e.preventDefault();e.stopPropagation();const o=selected();if(!o)return;const [w,h]=layerSize(),m=metrics(o,w,h),p=point(e);resizeState={o,d:Math.max(1,Math.hypot(p.x-m.x,p.y-m.y)),size:o.sizePct};handle.setPointerCapture(e.pointerId);};handle.onpointermove=e=>{if(window.EffectBrowser?.active())return;if(!resizeState)return;window.EditHistory?.begin('layer-gesture');e.preventDefault();const {o,d,size}=resizeState,[w,h]=layerSize(),m=metrics(o,w,h),p=point(e);o.sizePct=Math.max(2,Math.min(o.kind==='qr'?80:32,size*Math.hypot(p.x-m.x,p.y-m.y)/d));constrain(o);schedule();};for(const event of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(event,()=>{window.EditHistory?.commit();resizeState=null;});
+  canvas.onpointerdown=e=>{if(window.EffectBrowser?.active()){tap=null;lastTap=null;return;}if(!e.isPrimary)lastTap=null;tap=e.isPrimary?{id:e.pointerId,x:e.clientX,y:e.clientY}:null;};
+  canvas.onpointermove=e=>{if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>8){tap=null;lastTap=null;}};
+  canvas.onpointercancel=()=>{tap=null;lastTap=null;};
+  canvas.onpointerup=e=>{if(window.EffectBrowser?.active()){tap=null;return;}if(!tap||tap.id!==e.pointerId)return;tap=null;const p=point(e),o=hit(p.x,p.y);select(o?.id||null);tapObject(o);};
+  const handle=$('layerResize');handle.onpointerdown=e=>{if(window.EffectBrowser?.active())return;lastTap=null;e.preventDefault();e.stopPropagation();const o=selected();if(!o)return;const [w,h]=layerSize(),m=metrics(o,w,h),p=point(e);resizeState={o,d:Math.max(1,Math.hypot(p.x-m.x,p.y-m.y)),size:o.sizePct};handle.setPointerCapture(e.pointerId);};handle.onpointermove=e=>{if(window.EffectBrowser?.active())return;if(!resizeState)return;window.EditHistory?.begin('layer-gesture');e.preventDefault();const {o,d,size}=resizeState,[w,h]=layerSize(),m=metrics(o,w,h),p=point(e);o.sizePct=Math.max(2,Math.min(o.kind==='qr'?80:32,size*Math.hypot(p.x-m.x,p.y-m.y)/d));constrain(o);schedule();};for(const event of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(event,()=>{window.EditHistory?.commit();resizeState=null;});
   document.addEventListener('keydown',e=>{
     if(!['Delete','Backspace'].includes(e.key)||e.isComposing||e.ctrlKey||e.metaKey||e.altKey)return;
     if(e.target.closest?.('input,textarea,select,[contenteditable]')||(!$('sheet').hidden&&!$('sheet').classList.contains('desktop-inspector'))||!selected())return;
@@ -148,5 +177,5 @@ window.LayerEditor = (() => {
   $('compare').onkeydown=e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();peek=true;schedule();}};$('compare').onkeyup=$('compare').onblur=()=>{peek=false;schedule();};
   window.addEventListener('resize',()=>{refresh();if(document.body.classList.contains('layer-editing'))setTimeout(reveal,100);});
   window.visualViewport?.addEventListener('resize',()=>{if(document.body.classList.contains('layer-editing'))setTimeout(reveal,100);});
-  schedule();return {ready:Promise.all([fontReady,emojiReady]),list,selected,select,metrics,paint,space,refresh,openHome,openEditor,create,hit,remove};
+  schedule();return {ready:Promise.all([fontReady,emojiReady]),list,selected,select,metrics,paint,space,refresh,openHome,openEditor,activate,create,hit,remove};
 })();

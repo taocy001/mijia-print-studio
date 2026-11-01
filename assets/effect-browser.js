@@ -12,9 +12,14 @@ window.EffectBrowser=(()=>{
  new MutationObserver(markDrawer).observe($('sheetTitle'),{childList:true,subtree:true,characterData:true});
  const originalLabel=canvas.getAttribute('aria-label');canvas.tabIndex=0;
  const active=()=>!!mode,kind=()=>mode;
- const buttons={layout:'layoutBtn',filters:'filterBtn',templates:'templateBtn'},labels={layout:'排版',filters:'色调',templates:'模板'};
+ const buttons={layout:'layoutBtn',filters:'filterBtn',templates:'templateBtn',text:'addTextQuick',emoji:'addEmojiQuick'},labels={layout:'排版',filters:'色调',templates:'模板',text:'文字',emoji:'表情'};
+ const singleActions={text:$('addTextQuick').onclick,emoji:$('addEmojiQuick').onclick};
+ const isLayer=k=>k==='text'||k==='emoji';
+ const activationScope=()=>[state.photos,activePhoto(),state.mode,state.media];
+ const sameScope=scope=>scope.every((value,index)=>value===activationScope()[index]);
+ function cancelPending(){const had=!!activationTimer;clearTimeout(activationTimer);activationTimer=0;lastActivation=null;if(had)window.dispatchEvent(new Event('editor-activation-cancelled'));return had;}
  const allowed=k=>!!buttons[k]&&!$(buttons[k]).disabled&&(k!=='layout'||['photo','template'].includes(state.mode));
- const openGrid=k=>k==='layout'?openLayout():k==='filters'?openFilters():TemplateStudio.open();
+ const openGrid=k=>isLayer(k)?singleActions[k]():k==='layout'?openLayout():k==='filters'?openFilters():TemplateStudio.open();
  const items=()=>mode==='layout'?[{id:'cover',name:'铺满相纸'},{id:'contain',name:'完整保留'},{id:'bottom',name:'底部留白'}]:mode==='filters'?FILTERS.map(([id,name])=>({id,name})): [{id:null,name:'无模板'},...TEMPLATE_CATALOG.map(t=>({id:t.id,name:t.names.zh}))];
  const current=()=>mode==='layout'?(activePhoto()?.fit||state.fit||'cover'):mode==='filters'?(activePhoto()?.filter||'none'):(activePhoto()?.templateId||null);
  function activePhoto(){return window.active?window.active():state.photos[state.active];}
@@ -38,6 +43,7 @@ window.EffectBrowser=(()=>{
   lastEffect=signature;lastScope=scope;markDrawer();
  }
  function toggle(next){
+  if(isLayer(next)){exit(false);if(allowed(next))LayerEditor.activate(next,{resume:true});return;}
   clearTimeout(activationTimer);activationTimer=0;
   if(!allowed(next)){if(next==='layout')openLayout();return;}
   if(!activePhoto()){openGrid(next);return;}
@@ -54,7 +60,7 @@ window.EffectBrowser=(()=>{
   if(restore&&(sheetKind===old||!sheetKind))closeSheet();
   CropEditor.render();markDrawer();
  }
- function beforeSheet(next){if(lastActivation&&next!==lastActivation.kind){clearTimeout(activationTimer);activationTimer=0;lastActivation=null;}if(mode&&next!==mode)exit(false);}
+ function beforeSheet(next){cancelPending();if(mode&&next!==mode)exit(false);}
  function step(delta){
   clearTimeout(activationTimer);activationTimer=0;lastActivation=null;
   if(!mode||!allowed(mode)||!activePhoto())return;
@@ -68,19 +74,24 @@ window.EffectBrowser=(()=>{
  $('effectAll').onclick=()=>{clearTimeout(activationTimer);activationTimer=0;lastActivation=null;if(mode)openGrid(mode);refresh();};
  function activate(next,event){
   clearTimeout(activationTimer);activationTimer=0;
-  if(!allowed(next)||!activePhoto()){lastActivation=null;if(next==='layout'||allowed(next))openGrid(next);return;}
+  if(!allowed(next)||!activePhoto()&&!isLayer(next)){lastActivation=null;if(next==='layout'||allowed(next))openGrid(next);return;}
   const now=performance.now(),pointer=!!event&&event.detail!==0;
-  const double=pointer&&((lastActivation?.kind===next&&now-lastActivation.at<300)||event.detail===2);
+  const scope=activationScope();
+  const double=pointer&&lastActivation?.kind===next&&sameScope(lastActivation.scope)&&now-lastActivation.at<300;
   if(double){
    lastActivation=null;
-   toggle(next);
+   if(isLayer(next)){exit(false);if(next==='text'&&['label','card'].includes(state.mode))singleActions.text();else LayerEditor.activate(next,{resume:true});}
+   else toggle(next);
    return;
   }
-  lastActivation=pointer?{kind:next,at:now}:null;
-  const open=()=>{activationTimer=0;lastActivation=null;if(allowed(next)){exit(false);openGrid(next);refresh();}};
+  lastActivation=pointer?{kind:next,at:now,scope}:null;
+  const open=()=>{activationTimer=0;lastActivation=null;if(sameScope(scope)&&allowed(next)){exit(false);openGrid(next);refresh();}};
   if(pointer)activationTimer=setTimeout(open,300);else open();
  }
- for(const [k,id] of Object.entries(buttons)){$(id).onclick=e=>activate(k,e);$(id).title=labels[k]+' · 单击查看全部，双击左右切换';}
+ for(const [k,id] of Object.entries(buttons)){$(id).onclick=e=>activate(k,e);$(id).title=labels[k]+(isLayer(k)?' · 单击添加，双击继续编辑':' · 单击查看全部，双击左右切换');}
+ document.addEventListener('pointerdown',e=>{if(!e.target.closest('.tool-tabs button'))cancelPending();},true);
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')cancelPending();},true);
+ const previousBack=window.goBack;window.goBack=()=>cancelPending()||previousBack();
  function finish(g){if(g&&!g.cancelled&&Math.abs(g.dx)>=34&&Math.abs(g.dx)>Math.abs(g.dy)*1.4)step(g.dx<0?1:-1);}
  canvas.addEventListener('touchstart',e=>{if(!mode)return;focus();if(e.touches.length!==1){if(gesture)gesture.cancelled=true;return;}if(!gesture){const t=e.touches[0];gesture={id:t.identifier,x:t.clientX,y:t.clientY,dx:0,dy:0,cancelled:false};}},{passive:true});
  canvas.addEventListener('touchmove',e=>{if(!mode)return;if(e.touches.length!==1){if(gesture)gesture.cancelled=true;if(e.cancelable)e.preventDefault();return;}const t=[...e.touches].find(t=>t.identifier===gesture?.id);if(!t)return;gesture.dx=t.clientX-gesture.x;gesture.dy=t.clientY-gesture.y;if(Math.abs(gesture.dx)>Math.abs(gesture.dy)*1.2&&e.cancelable)e.preventDefault();},{passive:false});
@@ -91,7 +102,7 @@ window.EffectBrowser=(()=>{
  canvas.addEventListener('pointerup',e=>{if(!mode||!mouse||mouse.id!==e.pointerId)return;const g=mouse;mouse=null;finish(g);});
  for(const event of ['pointercancel','lostpointercapture'])canvas.addEventListener(event,()=>mouse=null);
  canvas.addEventListener('keydown',e=>{if(!mode||e.target!==canvas||e.altKey||e.ctrlKey||e.metaKey||e.isComposing)return;if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();step(e.key==='ArrowLeft'?-1:1);}else if(e.key==='Escape'){e.preventDefault();exit();}});
- window.addEventListener('blur',()=>{gesture=mouse=null;});
- window.addEventListener('resize',()=>{gesture=mouse=null;});
- return {active,kind,toggle,activate,step,exit,beforeSheet,refresh};
+ window.addEventListener('blur',()=>{cancelPending();gesture=mouse=null;});
+ window.addEventListener('resize',()=>{cancelPending();gesture=mouse=null;});
+ return {active,kind,toggle,activate,step,exit,beforeSheet,refresh,cancelPending,pending:()=>!!activationTimer};
 })();
