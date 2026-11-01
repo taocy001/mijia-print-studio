@@ -84,10 +84,10 @@ function photoGeometry(p,w,h,overrideFit){
  const fit=peek?'contain':overrideFit||p.fit||state.fit,base=fit==='contain'?Math.min(w/iw,h/ih):Math.max(w/iw,h/ih),scale=base*(peek?1:Math.max(1,p.zoom||1));
  const dw=iw*scale,dh=ih*scale,ex=Math.max(0,(dw-w)/2),ey=Math.max(0,(dh-h)/2);
  const dx=(peek?0:Math.max(-1,Math.min(1,p.x||0)))*ex,dy=(peek?0:Math.max(-1,Math.min(1,p.y||0)))*ey;
- return {image,toned:peek?image:Tone.image(image,filter(p)[0]),turn,scale,dw,dh,ex,ey,dx,dy,filterCSS:'none'};
+ return {image,tone:peek?'none':filter(p)[0],turn,scale,dw,dh,ex,ey,dx,dy,filterCSS:'none'};
 }
 function paintPhotoImage(ctx,g,x,y,w,h){
- ctx.save();ctx.filter=peek?'none':g.filterCSS;ctx.translate(x+w/2+g.dx,y+h/2+g.dy);ctx.rotate(g.turn*Math.PI/2);ctx.drawImage(g.toned||g.image,-g.image.naturalWidth*g.scale/2,-g.image.naturalHeight*g.scale/2,g.image.naturalWidth*g.scale,g.image.naturalHeight*g.scale);ctx.restore();
+ ctx.save();ctx.filter=peek?'none':g.filterCSS;ctx.translate(x+w/2+g.dx,y+h/2+g.dy);ctx.rotate(g.turn*Math.PI/2);ctx.drawImage(Tone.image(g.image,g.tone),-g.image.naturalWidth*g.scale/2,-g.image.naturalHeight*g.scale/2,g.image.naturalWidth*g.scale,g.image.naturalHeight*g.scale);ctx.restore();
 }
 function drawPhoto(ctx,p,x,y,w,h,overrideFit){
  if(!p||!images.has(p.src)){ctx.fillStyle='#e8ece2';ctx.fillRect(x,y,w,h);text(ctx,'＋',x+w/2,y+h/2,Math.min(w,h)/7,'#b3bfaa');return;}
@@ -155,14 +155,15 @@ function physical(logical){
  return canvas;
 }
 function canAdjustPhoto(){return !window.EffectBrowser?.active()&&ready()&&photoFrames.some(f=>f.p===active());}
-function render(){
+function render(){return Tone.preview(renderEditor);}
+function renderEditor(){
  const has=ready();document.body.classList.toggle('has-work',has);$('paperStage').hidden=!has;$('editorToolbar').hidden=!has;$('decorationActions').hidden=!has;$('originalBadge').hidden=!peek;$('compare').classList.toggle('held',peek);$('intro').hidden=has;$('empty').hidden=has;$('preview').hidden=!has;$('editing').hidden=!state.photos.length;
  $('spliceGuide').hidden=!has||state.media!==5014;
  $('modes').innerHTML=MODES.map(([key,name])=>`<button class="mode ${state.mode===key?'active':''}" data-mode="${key}" aria-pressed="${state.mode===key}">${icon(key)}${name}</button>`).join('');
  $('previewTitle').textContent=has?`${MODES.find(m=>m[0]===state.mode)[1]} · 打印预览`:'你的下一张珍藏';
  $('paperBtn').innerHTML='<span class="paper-long">'+esc(PAPER[state.media][0])+'</span><span class="paper-short" aria-hidden="true">'+(state.media===5009?'3 寸<br>背胶':state.media===5014?'4 寸<br>拼接':'6 寸<br>相纸')+'</span>'+icon('chevron');$('paperBtn').setAttribute('aria-label',PAPER[state.media][0]);$('paperInfo').textContent=`${PAPER[state.media][2]} · ${PAPER[state.media][1]}`;
  $('paperTag').textContent=PAPER[state.media][2];$('gestureHint').textContent=has&&state.mode!=='label'?'上下滑动浏览 · 点文字或表情可编辑':'好照片，值得一张相纸';
- if(has){photoFrames=[];collectingPhotoFrames=true;const output=compose(true,'editor');printPreview=output;collectingPhotoFrames=false;const canvas=$('preview');canvas.width=output.width;canvas.height=output.height;canvas.getContext('2d').drawImage(output,0,0);}
+ if(has){photoFrames=[];collectingPhotoFrames=true;const output=compose(true,'editor');printPreview=output;collectingPhotoFrames=false;if(!window.CropEditor){const canvas=$('preview');canvas.width=output.width;canvas.height=output.height;canvas.getContext('2d').drawImage(output,0,0);}}
  const photoMarkup=state.photos.map((p,i)=>`<div class="photo-thumb"><button class="photo-item ${i===state.active?'selected':''}" data-photo="${i}" aria-label="选择第 ${i+1} 张照片"><img src="${esc(p.src)}" alt=""></button><button class="remove-photo" data-remove-photo="${i}" aria-label="删除第 ${i+1} 张照片">${icon('close')}</button></div>`).join('')+(state.photos.length<6?`<button class="add-photo" id="addMore" aria-label="添加照片，长按拍照" title="点击选图，长按或 Shift+Enter 拍照">${icon('plus')}</button>`:'');
  if($('photos').innerHTML!==photoMarkup)$('photos').innerHTML=photoMarkup;
  $('layoutSummary').textContent=state.mode==='label'?(LabelBatch.enabled()?LabelBatch.summary():NameLabels.count()+' 枚姓名贴'):state.mode==='card'?'卡片':state.mode==='calendar'?state.month:state.mode==='id'?state.idSize.replace('x',' × ')+' mm':state.fit==='bottom'?'底部留白 '+(state.border*25.4/300).toFixed(1)+' mm':['photo','template'].includes(state.mode)&&!active()?.templateId&&['cover','contain'].includes(active()?.fit||state.fit)?((active()?.fit||state.fit)==='cover'?'铺满相纸':'完整保留'):state.border?'白边 '+(state.border*25.4/300).toFixed(1)+' mm':state.fit==='cover'?'铺满相纸':'完整保留';

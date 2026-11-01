@@ -1,6 +1,6 @@
 /* Same processing order and coefficients as mijia.py apply_filter. */
 window.Tone=(()=>{
- const full=new Map(),thumbs=new Map(),names=[['none','原片'],['auto','一键增强'],['bw','黑白'],['sepia','暖棕'],['cool','蓝调'],['dusk','黄昏'],['film','胶片'],['fresh','清新']];
+ const full=new Map(),thumbs=new Map(),previews=new Map(),names=[['none','原片'],['auto','一键增强'],['bw','黑白'],['sepia','暖棕'],['cool','蓝调'],['dusk','黄昏'],['film','胶片'],['fresh','清新']];
  const clip=x=>Math.max(0,Math.min(255,Math.floor(x)));
  const gray=(r,g,b)=>(r*19595+g*38470+b*7471+32768)>>16;
  function pixels(data,key){
@@ -21,6 +21,17 @@ window.Tone=(()=>{
   if(key==='cool')saturation(.95);if(key==='dusk')contrast(1.03);if(key==='film')saturation(.88);if(key==='fresh')saturation(.92);
   return data;
  }
- function image(source,key='none',small=false){if(key==='none'&&!small)return source;const cache=small?thumbs:full,id=source.src+'|'+key;if(cache.has(id))return cache.get(id);const c=document.createElement('canvas'),scale=small?Math.min(1,320/Math.max(source.naturalWidth,source.naturalHeight)):1;c.width=Math.round(source.naturalWidth*scale);c.height=Math.round(source.naturalHeight*scale);const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(source,0,0,c.width,c.height);const d=ctx.getImageData(0,0,c.width,c.height);pixels(d.data,key);ctx.putImageData(d,0,0);if(cache.size>=(small?16:2))cache.delete(cache.keys().next().value);cache.set(id,c);return c;}
- return {pixels,image,names};
+ let previewLimit=0;
+ function preview(work,limit=1280){const previous=previewLimit;previewLimit=previous?Math.min(previous,limit):limit;try{return work();}finally{previewLimit=previous;}}
+ function image(source,key='none',small=false){
+  if(key==='none'&&!small)return source;
+  const limit=small?320:previewLimit,cache=small?thumbs:limit?previews:full,id=source.src+'|'+key+'|'+limit;
+  if(cache.has(id)){const cached=cache.get(id);cache.delete(id);cache.set(id,cached);return cached;}
+  const c=document.createElement('canvas'),scale=limit?Math.min(1,limit/Math.max(source.naturalWidth,source.naturalHeight)):1;
+  c.width=Math.round(source.naturalWidth*scale);c.height=Math.round(source.naturalHeight*scale);
+  const ctx=c.getContext('2d',{willReadFrequently:true});ctx.drawImage(source,0,0,c.width,c.height);
+  const d=ctx.getImageData(0,0,c.width,c.height);pixels(d.data,key);ctx.putImageData(d,0,0);
+  if(cache.size>=(small?16:limit?8:2))cache.delete(cache.keys().next().value);cache.set(id,c);return c;
+ }
+ return {pixels,image,names,preview};
 })();

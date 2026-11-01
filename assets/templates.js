@@ -9,14 +9,32 @@ window.TemplateStudio=(()=>{
   if(!['photo','template'].includes(state.mode))return;
   const request=++openRequest,selected=active()?active().templateId:state.templateId;const [pw,ph]=panelSize(),wide=pw>ph,orientation=pw===ph?'方形':wide?'横版':'竖版',label=state.media===5009?'3 寸背胶':state.media===5014?'4 寸拼接 · 单幅':'6 寸';
   openSheet('templates','模板',`<div class="template-heading"><span>${label} · ${orientation}</span>${state.media===5012?`<button id="templateOrientation">${wide?'切换竖版':'切换横版'}</button>`:''}</div><div class="template-grid"><button class="template-card plain-template ${!selected?'selected':''}" id="noTemplate" aria-pressed="${!selected}"><img alt="无模板"><span>无模板</span></button>${TEMPLATE_CATALOG.map(t=>`<button class="template-card ${selected===t.id?'selected':''}" aria-pressed="${selected===t.id}" data-template="${t.id}"><img alt="${esc(t.names.zh)}"><span>${esc(t.names.zh)}</span></button>`).join('')}</div>`);
-  const photo=active()||{src:'/sample.svg'};await loadPhoto(photo);if(request!==openRequest||sheetKind!=='templates'||!$('noTemplate'))return;
-  if(photo){const c=document.createElement('canvas');c.width=Math.round(240*pw/Math.max(pw,ph));c.height=Math.round(240*ph/Math.max(pw,ph));const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);drawPhoto(ctx,!window.EffectBrowser?.active()&&(photo.fit||state.fit)==='contain'?{...photo,zoom:1,x:0,y:0}:photo,0,0,c.width,c.height);$('noTemplate').querySelector('img').src=c.toDataURL('image/jpeg',.85);}
-  const targets=[...$('sheetBody').querySelectorAll('[data-template]')];
-  await Promise.all(targets.map(async button=>{const base=TEMPLATE_CATALOG.find(t=>t.id===button.dataset.template),e=OriginalTemplates.variant(base,pw,ph);try{const c=document.createElement('canvas');c.width=Math.round(240*pw/Math.max(pw,ph));c.height=Math.round(240*ph/Math.max(pw,ph));const ctx=c.getContext('2d');ctx.scale(c.width/e.width,c.height/e.height);paint(ctx,photo,0,0,e.width,e.height,e);if(button.isConnected)button.querySelector('img').src=c.toDataURL('image/jpeg',.85);}catch{if(button.isConnected)button.disabled=true;}}));
-  if(request!==openRequest||sheetKind!=='templates')return;
-  if($('templateOrientation'))$('templateOrientation').onclick=async()=>{state.orientation=wide?'portrait':'landscape';try{await ensureCurrent();schedule();if(sheetKind==='templates')open();}catch(e){toast('模板未能载入');}};
-  $('noTemplate').onclick=()=>selectTemplate(null);
-  $('sheetBody').querySelectorAll('[data-template]').forEach(button=>button.onclick=()=>selectTemplate(button.dataset.template));
+  const grid=$('sheetBody').querySelector('.template-grid'),plain=$('noTemplate'),targets=[...grid.querySelectorAll('[data-template]')];
+  const current=()=>request===openRequest&&sheetKind==='templates'&&grid.isConnected&&$('sheetBody').contains(grid);
+  // Choices respond immediately, even while their previews are still being painted.
+  if($('templateOrientation'))$('templateOrientation').onclick=async()=>{state.orientation=wide?'portrait':'landscape';try{await ensureCurrent();schedule();if(current())open();}catch(e){toast('模板未能载入');}};
+  plain.onclick=()=>{if(current())selectTemplate(null);};
+  targets.forEach(button=>button.onclick=()=>{if(current())selectTemplate(button.dataset.template);});
+  const photo=active()||{src:'/sample.svg'};
+  try{await loadPhoto(photo);}catch(e){if(current())toast('照片未能载入');return;}
+  const queue=[plain,...targets];let index=0;
+  while(index<queue.length&&current()){
+   // Yield before each small batch so opening, scrolling and changing tabs remain responsive.
+   await new Promise(resolve=>requestAnimationFrame(resolve));
+   if(!current())return;
+   const started=performance.now();
+   do{
+    const button=queue[index++];if(!current()||!button.isConnected)return;
+    try{
+     const c=document.createElement('canvas');c.width=Math.round(240*pw/Math.max(pw,ph));c.height=Math.round(240*ph/Math.max(pw,ph));const ctx=c.getContext('2d');
+     Tone.preview(()=>{
+      if(button===plain){ctx.fillStyle='white';ctx.fillRect(0,0,c.width,c.height);drawPhoto(ctx,!window.EffectBrowser?.active()&&(photo.fit||state.fit)==='contain'?{...photo,zoom:1,x:0,y:0}:photo,0,0,c.width,c.height);}
+      else{const base=TEMPLATE_CATALOG.find(t=>t.id===button.dataset.template),e=OriginalTemplates.variant(base,pw,ph);ctx.scale(c.width/e.width,c.height/e.height);paint(ctx,photo,0,0,e.width,e.height,e);}
+     },320);
+     if(current()&&button.isConnected)button.querySelector('img').src=c.toDataURL('image/jpeg',.85);
+    }catch(e){if(current()&&button.isConnected)button.disabled=true;}
+   }while(index<queue.length&&current()&&performance.now()-started<6);
+  }
  }
  $('templateBtn').onclick=()=>window.EffectBrowser?EffectBrowser.toggle('templates'):open();return {open,paint,ensureCurrent,entry,apply:selectTemplate};
 })();
