@@ -38,7 +38,7 @@ with sync_playwright() as p:
    page.locator('#layerText').fill('测试文字');page.keyboard.press('Backspace');assert page.locator('#layerText').input_value()=='测试文';page.wait_for_timeout(100);page.evaluate('closeSheet()');page.locator('body').click(position={'x':2,'y':2});page.keyboard.press('Delete')
    # Clicking the header does not select another photo or object.
    assert page.evaluate('active().overlays.length')==0
-   page.locator('#addEmojiQuick').click();assert '添加文字' not in page.locator('#sheetBody').inner_text()
+   page.locator('#addEmojiQuick').click();page.wait_for_selector('.emoji-grid');assert '添加文字' not in page.locator('#sheetBody').inner_text()
    assert page.locator('.emoji-grid img').count()==60
    scroll=page.locator('#sheetBody').evaluate('(e)=>{e.scrollTop=e.scrollHeight;return [e.scrollTop,e.scrollHeight,e.clientHeight]}');assert scroll[0]>0,scroll
    page.locator('#sheetBody').evaluate('(e)=>e.scrollTop=0');page.locator('[data-emoji]').first.click();page.keyboard.press('Delete');assert page.evaluate('active().overlays.length')==0

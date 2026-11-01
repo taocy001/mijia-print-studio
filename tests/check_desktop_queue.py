@@ -2,7 +2,7 @@
 from pathlib import Path
 from urllib.parse import urlparse
 import mimetypes
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 ROOT=Path(__file__).resolve().parents[1]
 with sync_playwright() as runtime:
  browser=runtime.chromium.launch()
@@ -20,7 +20,7 @@ with sync_playwright() as runtime:
   page.route('**/*',route);page.goto('https://studio.test/');page.wait_for_function('native.canManageQueue&&window.LayerEditor');page.evaluate('LayerEditor.ready')
   for mode in ['label','card']:
    page.locator('#menuBtn').click();page.locator('#menuWorkType').click();page.locator('[data-layout-mode="'+mode+'"]').click();page.locator('#addTextQuick').click()
-   assert page.locator('#addTextQuick').get_attribute('aria-pressed')=='true'
+   expect(page.locator('#addTextQuick')).to_have_attribute('aria-pressed','true')
    assert page.locator('.tool-tabs [aria-pressed=true]').count()==1
   def queue():
    if page.locator('#scrim').is_visible():page.locator('#closeSheet').click()
