@@ -2,7 +2,7 @@
 window.Drawer=(()=>{
  const sheet=$('sheet'),body=$('sheetBody'),handle=$('sheetHandle'),header=sheet.querySelector('header');
  let drag=null,current=0,level='half',settingsLevel='half',kind='',ignoreClick=false,contentStart=null,glide=0;
- const settings=new Set(['menu','device','paper','sharing','coat','workType','history','historyDetail','job','models','qr','camera']);
+ const settings=new Set(['menu','device','paper','sharing','coat','workType','history','historyDetail','hostQueue','job','models','qr','camera']);
  const remember=()=>{if(settings.has(kind))settingsLevel=level;};
  const bounds=()=>{const viewport=Math.max(108,Math.min(innerHeight,window.visualViewport?.height||innerHeight)),full=viewport-16;return {half:Math.min(full,Math.max(220,viewport*.46)),full};};
  function apply(h,animate=false){const {full}=bounds();current=Math.max(92,Math.min(full,h));sheet.classList.toggle('drawer-animate',animate);sheet.style.setProperty('--drawer-height',current+'px');handle.setAttribute('aria-expanded',String(current>bounds().half+30));}

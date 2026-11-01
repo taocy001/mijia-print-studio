@@ -5,6 +5,7 @@ window.TemplateStudio=(()=>{
  async function ensureCurrent(){}
  function paint(ctx,p,x,y,w,h,e=entry(p,w,h)){OriginalTemplates.paint(ctx,p,x,y,w,h,e);}
  async function open(){
+  if(!['photo','template'].includes(state.mode))return;
   const [pw,ph]=panelSize(),wide=pw>ph,orientation=pw===ph?'方形':wide?'横版':'竖版',label=state.media===5009?'3 寸背胶':state.media===5014?'4 寸拼接 · 单幅':'6 寸';
   openSheet('templates','模板',`<div class="template-heading"><span>${label} · ${orientation}</span>${state.media===5012?`<button id="templateOrientation">${wide?'切换竖版':'切换横版'}</button>`:''}</div><div class="template-grid"><button class="template-card plain-template ${!active()?.templateId?'selected':''}" id="noTemplate" aria-pressed="${!active()?.templateId}"><img alt="无模板"><span>无模板</span></button>${TEMPLATE_CATALOG.map(t=>`<button class="template-card ${active()?.templateId===t.id?'selected':''}" data-template="${t.id}"><img alt="${esc(t.names.zh)}"><span>${esc(t.names.zh)}</span></button>`).join('')}</div>`);
   const photo=active()||{src:'/sample.svg'};await loadPhoto(photo);if(sheetKind!=='templates'||!$('noTemplate'))return;

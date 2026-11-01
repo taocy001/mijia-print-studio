@@ -28,14 +28,14 @@ with sync_playwright() as p:
  page.route('https://studio.local/**',route);page.goto('https://studio.local/');page.wait_for_function('window.LayerEditor&&window.CropEditor&&window.StudioExtras');page.evaluate('LayerEditor.ready')
 
  page.wait_for_function('native.canManageQueue===true');page.evaluate('openHistory()');page.locator('#hostQueue').click()
- page.locator('#queueBack').wait_for(state='visible')
+ page.locator('#settingsBack').wait_for(state='visible')
  page.locator('[data-query-job]').click();page.wait_for_timeout(100)
  assert ('/api/admin/reconcile','{"token":"unknown-1"}') in calls
  page.once('dialog',lambda dialog:dialog.dismiss());page.locator('[data-resolve-job]').click()
  assert not any(path=='/api/admin/resolve' for path,_ in calls)
  page.once('dialog',lambda dialog:dialog.accept());page.locator('[data-resolve-job]').click();page.wait_for_timeout(100)
  assert ('/api/admin/resolve','{"token":"unknown-1","confirmed":true}') in calls
- page.locator('#queueBack').click();assert page.locator('#hostQueue').is_visible()
+ page.locator('#settingsBack').click();assert page.locator('#hostQueue').is_visible()
  admin[0]=False;page.evaluate('BrowserTransport.refresh()');page.evaluate('poll();openHistory()');assert page.locator('#hostQueue').count()==0
  page.evaluate('openHistory()');page.locator('[data-history="0"]').click();assert '第 1 页 2 份' in page.locator('#sheetBody').inner_text()
  page.once('dialog',lambda dialog:dialog.dismiss());page.locator('#reprintOriginal').click();assert not any(path=='/api/reprint' for path,_ in calls)

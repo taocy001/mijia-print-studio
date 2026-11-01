@@ -3,7 +3,7 @@
  if(!window.BrowserTransport)return;
  const media=matchMedia('(min-width:1000px) and (pointer:fine)'),sheet=$('sheet');
  const open=openSheet,close=closeSheet;let restore=0,last='layout';
- const settings=new Set(['menu','device','paper','sharing','coat','workType','history','historyDetail','job','models','qr','camera']);
+ const settings=new Set(['menu','device','paper','sharing','coat','workType','history','historyDetail','hostQueue','job','models','qr','camera']);
  const back=$('settingsBack');
  const panels={layout:()=>openLayout(),filters:()=>openFilters(),templates:()=>TemplateStudio.open()};
  function refresh(){cancelAnimationFrame(restore);restore=requestAnimationFrame(()=>{if(media.matches&&sheet.hidden)panels[last]?.();});}
@@ -12,7 +12,7 @@
   const inline=media.matches&&['layout','filters','templates','layers','text'].includes(kind);
   sheet.classList.toggle('desktop-inspector',inline);sheet.classList.toggle('desktop-settings',media.matches&&settings.has(kind));
   if(inline){if(panels[kind])last=kind;sheet.setAttribute('aria-modal','false');$('scrim').hidden=true;}
-  document.querySelectorAll('.tool-tabs button').forEach(b=>b.setAttribute('aria-pressed',String(inline&&({layoutBtn:'layout',filterBtn:'filters',templateBtn:'templates',addTextQuick:'文字',addEmojiQuick:'表情'}[b.id]===kind||b.id==='addTextQuick'&&kind==='layers'&&args[0].includes('文字')||b.id==='addEmojiQuick'&&kind==='layers'&&args[0].includes('表情')))));
+  document.querySelectorAll('.tool-tabs button').forEach(b=>b.setAttribute('aria-pressed',String(inline&&({layoutBtn:'layout',filterBtn:'filters',templateBtn:'templates',addTextQuick:'text',addEmojiQuick:'表情'}[b.id]===kind||b.id==='addTextQuick'&&kind==='layers'&&args[0].includes('文字')||b.id==='addEmojiQuick'&&kind==='layers'&&args[0].includes('表情')))));
  };
  window.closeSheet=function(){const kind=sheetKind;close();sheet.classList.remove('desktop-inspector','desktop-settings');back.hidden=true;if(media.matches){if(panels[kind])last=kind;refresh();}};
  $('closeSheet').onclick=()=>closeSheet();$('scrim').onclick=()=>closeSheet();

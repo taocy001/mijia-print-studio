@@ -1,6 +1,6 @@
 // Keep viewing controls independent of the photograph and its print coordinates.
 (()=>{
- const bar=document.querySelector('.photo-tools'),board=$('board'),key='liuying-toolbar-position';
+ const bar=document.querySelector('.photo-tools'),board=$('board'),workspace=document.querySelector('.workspace'),key='liuying-toolbar-position';
  let position=null,drag=null,suppress=false;
  try{const p=JSON.parse(localStorage.getItem(key));if(p&&Number.isFinite(p.x)&&Number.isFinite(p.y))position=p;}catch{}
  function bounds(){
@@ -9,7 +9,14 @@
   return {left,top:upper,maxX:Math.max(left,right-bar.offsetWidth),maxY:Math.max(upper,bottom-bar.offsetHeight)};
  }
  function place(x,y){const b=bounds();x=Math.max(b.left,Math.min(x,b.maxX));y=Math.max(b.top,Math.min(y,b.maxY));Object.assign(bar.style,{left:x+'px',top:y+'px',bottom:'auto',transform:'none'});return{x,y,...b};}
- function fit(){if(!bar.offsetWidth)return;const b=bounds(),r=board.getBoundingClientRect();if(position)place(b.left+position.x*(b.maxX-b.left),b.top+position.y*(b.maxY-b.top));else place(r.left+(r.width-bar.offsetWidth)/2,r.bottom-bar.offsetHeight-16);}
+ function fit(){
+  if(!bar.offsetWidth)return;const b=bounds();
+  if(position){place(b.left+position.x*(b.maxX-b.left),b.top+position.y*(b.maxY-b.top));return;}
+  const photo=board.getBoundingClientRect(),visible=workspace.getBoundingClientRect();
+  const left=Math.max(b.left,photo.left,visible.left),right=Math.min(b.maxX+bar.offsetWidth,photo.right,visible.right);
+  const top=Math.max(b.top,photo.top,visible.top),bottom=Math.min(b.maxY+bar.offsetHeight,photo.bottom,visible.bottom);
+  place(left+Math.max(0,right-left-bar.offsetWidth)/2,Math.max(top,bottom-bar.offsetHeight-16));
+ }
  bar.addEventListener('pointerdown',e=>{
   if(!e.isPrimary||e.button!==0)return;
   suppress=false;const r=bar.getBoundingClientRect();
@@ -27,6 +34,6 @@
  function end(e){if(!drag||e.pointerId!==drag.id)return;if(drag.moved){try{localStorage.setItem(key,JSON.stringify(position));}catch{}}drag=null;bar.classList.remove('dragging');peek=false;schedule();}
  bar.addEventListener('pointerup',end);bar.addEventListener('pointercancel',end);bar.addEventListener('lostpointercapture',e=>{if(e.target===bar&&!bar.hasPointerCapture(e.pointerId))end(e);});
  bar.addEventListener('click',e=>{if(suppress){e.preventDefault();e.stopImmediatePropagation();suppress=false;}},true);
- window.addEventListener('resize',fit);document.querySelector('.workspace').addEventListener('scroll',()=>{if(!position)fit();});
- new ResizeObserver(fit).observe(document.querySelector('.app'));new ResizeObserver(fit).observe(board);new ResizeObserver(fit).observe(bar);requestAnimationFrame(fit);
+ window.addEventListener('resize',fit);workspace.addEventListener('scroll',()=>{if(!position)fit();});
+ const resize=new ResizeObserver(fit);for(const element of [document.querySelector('.app'),workspace,board,bar,$('photos'),document.querySelector('.dock')])resize.observe(element);requestAnimationFrame(fit);
 })();

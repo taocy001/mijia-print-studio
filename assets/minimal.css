@@ -69,7 +69,7 @@ body.landscape .paper-short{display:block;white-space:nowrap;line-height:1.6}
  .topbar,.dock{background:#f7f8faf5;border-color:var(--line)}
  .topbar button,.tool-tabs button,#layerTools button{color:var(--ink)}
  .topbar #printBtn{background:#d9bb76;color:#24251f}
- .sheet,.sheet.layer-sheet,.layer-sheet>header,.emoji-tabs{background:#fff;color:var(--ink);border-color:var(--line)}
+ #sheet>header,.sheet,.sheet.layer-sheet,.layer-sheet>header,.emoji-tabs{background:#fff;color:var(--ink);border-color:var(--line)}
  .sheet .close,.segments button,.layer-options button,.mode-grid button,.secondary-button,.menu-row,.emoji-grid button,.emoji-tabs button,.template-card,.paper-option,.history-card{background:#f0f1f3;color:var(--ink);border-color:var(--line)}
  .sheet .hint,.field>label span,.info-row span,.template-heading,.paper-option small,.confirm-summary span,.emoji-category h3{color:var(--muted)}
  input[type=text],input[type=month],input[type=number],select,#layerText{background:#fff;color:var(--ink);border-color:#c5c9d0}
