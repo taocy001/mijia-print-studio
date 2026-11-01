@@ -28,8 +28,12 @@ public final class MainActivity extends Activity {
     private ValueCallback<Uri[]> textFileCallback;
     private final java.util.concurrent.atomic.AtomicBoolean savingProject=new java.util.concurrent.atomic.AtomicBoolean();
     private volatile byte[] pendingProject;
+    private final java.util.concurrent.atomic.AtomicBoolean captureWorking=new java.util.concurrent.atomic.AtomicBoolean();
+    private boolean captureWebReady;
+    private String captureDelivered;
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
+        try{CameraCapture.recover(this,saved!=null);}catch(Exception error){android.util.Log.w("LiuyingUI","Capture recovery unavailable");}
         try{Store.recover(this);}catch(Exception e){android.util.Log.w("LiuyingPrint","Recovery state could not be saved");}
         updateSystemTheme();
         web=new WebView(this);updateSystemTheme();
@@ -85,6 +89,37 @@ public final class MainActivity extends Activity {
         if(web!=null)web.setBackgroundColor(color);
     }
     private void event(String type,Object value){main.post(()->{if(web!=null)try{web.evaluateJavascript("window.nativeEvent&&window.nativeEvent("+new JSONObject().put("type",type).put("value",value)+")",null);}catch(Exception ignored){}});}
+    private void captureFinished(String error){try{event("captureFinished",new JSONObject().put("error",error));}catch(Exception ignored){}}
+    private void startCapture(String id){
+        try{
+            if(isFinishing()||isDestroyed())throw new IOException("拍摄已取消");
+            Uri uri=CaptureProvider.uri(id);Intent intent=new Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+                .putExtra(MediaStore.EXTRA_OUTPUT,uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            intent.setClipData(ClipData.newRawUri("capture",uri));
+            startActivityForResult(intent,14);
+        }catch(Exception error){receiveCapture(false,"无法打开相机，请确认手机已安装相机应用");}
+    }
+    private void receiveCapture(boolean success,String error){
+        String id="";try{id=CameraCapture.read(this).optString("id");CameraCapture.receive(this,success,error);}
+        catch(Exception failure){captureFinished("拍摄结果未能保存，请稍后恢复");}
+        finally{if(!id.isEmpty())try{revokeUriPermission(CaptureProvider.uri(id),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);}catch(Exception ignored){}}
+        drainCapture();
+    }
+    private void drainCapture(){
+        try{JSONObject pending=CameraCapture.read(this);String stage=pending.optString("stage");
+            if(stage.equals("received")){
+                try{revokeUriPermission(CaptureProvider.uri(pending.getString("id")),Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_WRITE_URI_PERMISSION);}catch(Exception ignored){}
+                if(!captureWorking.compareAndSet(false,true))return;
+                Thread worker=new Thread(()->{boolean completed=false;try{CameraCapture.finish(this);completed=true;}catch(Exception|OutOfMemoryError error){captureFinished("拍摄结果未能保存，请稍后恢复");}finally{captureWorking.set(false);if(completed)main.post(this::drainCapture);}},"liuying-capture");
+                try{worker.start();}catch(RuntimeException|OutOfMemoryError error){captureWorking.set(false);captureFinished("无法处理拍摄照片，请稍后恢复");}return;
+            }
+            if(!stage.equals("ready")||!captureWebReady||web==null)return;
+            String id=pending.getString("id");if(id.equals(captureDelivered))return;captureDelivered=id;
+            JSONObject photos=new JSONObject().put("type","photos").put("value",pending.getJSONArray("photos"));
+            JSONObject finished=new JSONObject().put("type","captureFinished").put("value",pending.getJSONObject("finished"));
+            web.evaluateJavascript("(async()=>{try{await window.nativeEvent("+photos+");}catch(e){}finally{await window.nativeEvent("+finished+");}})()",null);
+        }catch(Exception error){captureFinished("拍摄记录未能读取，请稍后恢复");}
+    }
     private void projectError(String message){try{event("projectError",new JSONObject().put("message",message));}catch(Exception ignored){}}
     private boolean granted(){return checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED&&checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED;}
     private void check(){
@@ -112,6 +147,15 @@ public final class MainActivity extends Activity {
         if(web!=null)web.post(()->web.evaluateJavascript("window.updateEditorOrientation&&window.updateEditorOrientation()",null));
     }
     private final class Bridge {
+        @JavascriptInterface public String capture(int remaining){
+            try{JSONObject pending=CameraCapture.begin(MainActivity.this,remaining);String id=pending.getString("id");main.post(()->startCapture(id));return new JSONObject().put("ok",true).put("id",id).toString();}
+            catch(Exception error){String message=error.getMessage()==null?"无法准备拍摄":error.getMessage();captureFinished(message);try{return new JSONObject().put("error",message).toString();}catch(Exception ignored){return "{}";}}
+        }
+        @JavascriptInterface public void captureReady(){main.post(()->{captureWebReady=true;captureDelivered=null;drainCapture();});}
+        @JavascriptInterface public String captureAck(String id){
+            try{CameraCapture.acknowledge(MainActivity.this,id);main.post(()->captureDelivered=null);return "{\"ok\":true}";}
+            catch(Exception error){event("toast","拍摄记录确认失败，可稍后恢复");return "{\"error\":\"拍摄记录确认失败\"}";}
+        }
         @JavascriptInterface public String saveProject(String json){
             if(!savingProject.compareAndSet(false,true))return "{\"error\":\"已有作品正在保存\"}";
             try{pendingProject=ProjectFiles.projectBytes(json);}
@@ -223,6 +267,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==14){receiveCapture(result==RESULT_OK,null);return;}
         if(request==13){
             byte[] bytes=pendingProject;pendingProject=null;
             if(bytes==null){savingProject.set(false);return;}
@@ -261,5 +306,5 @@ public final class MainActivity extends Activity {
         },"liuying-import").start();
     }
     @Override public void onBackPressed(){web.evaluateJavascript("window.goBack?window.goBack():false",value->{if(!"true".equals(value))super.onBackPressed();});}
-    @Override protected void onDestroy(){pendingProject=null;savingProject.set(false);if(textFileCallback!=null){textFileCallback.onReceiveValue(null);textFileCallback=null;}if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){captureWebReady=false;pendingProject=null;savingProject.set(false);if(textFileCallback!=null){textFileCallback.onReceiveValue(null);textFileCallback=null;}if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
 }
