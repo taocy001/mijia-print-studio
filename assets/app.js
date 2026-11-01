@@ -185,13 +185,14 @@ function syncPaper(){
 }
 function poll(){try{const previous=detectedPaper();native=JSON.parse(bridge('state')||'{}');syncPaper();if(previous!==detectedPaper()&&sheetKind==='paper')openPaper();updateStatus();refreshDeviceSheet();window.dispatchEvent(new Event('studio-state'));}catch(e){}}
 function openSheet(kind,title,html){
+ window.PaperPreview?.clear();
  const samePanel=sheetKind===kind&&!$('sheet').hidden,scroll=samePanel?$('sheetBody').scrollTop:0,sheetScroll=samePanel?$('sheet').scrollTop:0,focused=samePanel&&$('sheetBody').contains(document.activeElement)?document.activeElement:null;
  const focusId=focused?.id,selection=focused&&typeof focused.selectionStart==='number'?[focused.selectionStart,focused.selectionEnd]:null;
  $('sheet').setAttribute('aria-modal','true');$('sheet').dataset.kind=kind;$('settingsBack').hidden=!['device','paper','sharing','coat','workType','history','historyDetail','job'].includes(kind);document.body.classList.remove('layer-editing');$('sheet').classList.remove('layer-sheet','emoji-sheet');sheetKind=kind;$('sheetTitle').textContent=title;$('sheetBody').innerHTML=html;$('sheet').hidden=false;$('scrim').hidden=false;document.body.style.overflow='hidden';icons($('sheet'));$('sheetBody').querySelectorAll('[data-close]').forEach(b=>b.remove());if(window.Drawer)Drawer.open(kind,samePanel);
  if(focusId&&$(focusId)){try{$(focusId).focus({preventScroll:true});if(selection)$(focusId).setSelectionRange(...selection);}catch(e){}}
  $('sheet').scrollTop=sheetScroll;$('sheetBody').scrollTop=scroll;
 }
-function closeSheet(){if(window.Drawer)Drawer.reset();document.body.classList.remove('layer-editing');$('sheet').classList.remove('layer-sheet','emoji-sheet');sheetKind='';$('sheet').hidden=true;$('scrim').hidden=true;document.body.style.overflow='';pendingPrint=null;}
+function closeSheet(){window.PaperPreview?.clear();if(window.Drawer)Drawer.reset();document.body.classList.remove('layer-editing');$('sheet').classList.remove('layer-sheet','emoji-sheet');sheetKind='';$('sheet').hidden=true;$('scrim').hidden=true;document.body.style.overflow='';pendingPrint=null;}
 $('settingsBack').onclick=()=>{if(sheetKind==='paper')openDevice();else if(sheetKind==='historyDetail')openHistory();else $('menuBtn').click();};
 window.goBack=()=>{if(sheetKind){closeSheet();return true;}if(window.LayerEditor&&LayerEditor.selected()){LayerEditor.select(null);return true;}return false;};
 function segments(key,choices){return `<div class="segments">${choices.map(([v,n])=>`<button data-setting="${key}" data-value="${v}" class="${String(state[key])===String(v)?'selected':''}">${n}</button>`).join('')}</div>`;}
@@ -282,6 +283,7 @@ async function confirmPrint(){
  try{const pages=await preparePrintPages();if(!pages.length)return;
   pendingPrint={pages};
   openSheet('confirm','打印预览',`<div class="print-pages">${pages.map((p,i)=>`<figure><div class="confirmation-preview"><img src="${p.preview}" alt="第 ${i+1} 张最终打印效果"></div><figcaption>第 ${i+1} / ${pages.length} 张 · ${p.orientation==='square'?'方形':p.orientation==='landscape'?'横版':'竖版'} · ${p.copies} 份${p.ocMask?' · 含覆膜隐藏内容':''}</figcaption></figure>`).join('')}</div><div class="confirm-summary"><strong>${PAPER[state.media][0]} · 共 ${pages.reduce((n,p)=>n+p.copies,0)} 张相纸</strong><span>${filter()[1]}</span></div><p class="hint">${state.media===5014&&state.photos.length%2?'最后一张照片重复填满上下两格。':''}${state.media===5014?'同页覆膜深浅使用第一张照片的设置。':''}${pages.length>1?'上下滑动查看全部打印页。':''}将依次打印以上全部内容；中断时停止后续照片，不会自动重复打印。</p><button class="full-button" id="confirmSend">${icon('printer')} 确认打印 ${pages.reduce((n,p)=>n+p.copies,0)} 张</button>`);
+  window.PaperPreview?.mount($('sheetBody'),pages);
  }catch(e){toast(e.message||'无法生成打印预览');}finally{updateStatus();}
 }
 function changeSetting(key,value){if(key==='fit'&&value==='bottom'){const p=active();state.border=p?.border||78;if(p)Object.assign(p,{border:state.border,zoom:1,x:0,y:0,templateId:null});state.templateId=null;if(state.mode==='template')state.mode='photo';}if(['fit','border','orientation'].includes(key)&&active())active().facePending=false;if(['filter','fit','border'].includes(key)&&active())active()[key]=value;state[key]=value;render();save();}
