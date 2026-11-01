@@ -24,7 +24,7 @@ with sync_playwright() as runtime:
       const mixed={...red,src:mixCanvas.toDataURL()};await loadPhoto(mixed);const mixedEdge=edge(mixed);
       const redEdge=edge(red),blueEdge=edge(blue);red.filter='bw';const bw=edge(red);red.filter='sepia';const sepia=edge(red);red.filter='none';
       const restored=edge(red);red.zoom=2;red.x=.7;red.y=-.5;const moved=edge(red);red.zoom=1;red.x=red.y=0;
-      if(TEMPLATE_CATALOG.length!==20)throw Error('Expected 20 original templates');
+      if(TEMPLATE_CATALOG.length!==30)throw Error('Expected 30 original templates');
       const failures=[],tiles=[];
       for(const template of TEMPLATE_CATALOG){
         const a=OriginalTemplates.variant(template,1216,1824),b=OriginalTemplates.variant(template,1824,1216);
@@ -55,4 +55,4 @@ with sync_playwright() as runtime:
     atlas.set_content('<style>body{background:#e9e8e4;font:12px sans-serif}main{display:grid;grid-template-columns:repeat(8,1fr);gap:8px}figure{margin:0;background:white;padding:8px;text-align:center}img{height:150px;max-width:100%;object-fit:contain}</style><main>'+result['atlas']+'</main>')
     atlas.screenshot(path='/tmp/adaptive-template-atlas.png',full_page=True)
     assert not errors,errors;browser.close()
-print('PASS: 20 templates × 4 canvases, photo pixels protected, filter-aware palette, stable crop colors')
+print('PASS: 30 templates × 4 canvases, photo pixels protected, filter-aware palette, stable crop colors')

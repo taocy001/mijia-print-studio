@@ -30,12 +30,12 @@ with sync_playwright() as p:
    assert stage['x']>=workspace['x']-1 and stage['y']>=workspace['y']-1 and stage['y']+stage['height']<=workspace['y']+workspace['height']+1,(workspace,stage)
    for tool in ('layoutBtn','filterBtn','templateBtn','addTextQuick','addEmojiQuick'):
     page.locator('#'+tool).click()
-    if tool=='templateBtn':page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===20")
+    if tool=='templateBtn':page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===30")
     panel=page.locator('#sheet').bounding_box();assert panel['x']>=workspace['x']+workspace['width'],panel
     assert page.locator('#scrim').is_hidden()
     assert page.locator('.dock').is_visible()
     assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
-   page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===20")
+   page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===30")
    page.locator('[data-template="studio-petal"]').click();page.wait_for_function("sheetKind==='templates'&&!document.querySelector('#sheet').hidden")
    page.screenshot(path=f'/tmp/liuying-desktop-{width}-{scheme}.png')
    page.locator('#printBtn').click();page.wait_for_function("sheetKind==='confirm'")
