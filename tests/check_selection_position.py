@@ -46,7 +46,7 @@ with sync_playwright() as p:
    assert moved['y']>photo['y']+photo['height'],'Toolbar must move below the photo'
    assert moved['y']+moved['height']<=page.locator('.dock').bounding_box()['y']
    page.evaluate('LayerEditor.select(LayerEditor.list()[0].id)');assert abs(page.locator('.photo-tools').bounding_box()['y']-moved['y'])<1
-  page.locator('#menuBtn').click();page.locator('#menuDevice').click();page.locator('#changePaper').click();page.locator('#settingsBack').click();assert page.evaluate("sheetKind==='device'")
+  page.locator('#menuBtn').click();page.locator('#menuDevice').click();assert page.locator('#changePaper').count()==0;assert page.locator('#sheetTitle').inner_text()=='打印机与连接'
   page.locator('#settingsBack').click();assert page.evaluate("sheetKind==='menu'")
   page.close()
  page=b.new_page(viewport={'width':1200,'height':1000});page.route('https://studio.test/**',route);page.goto('https://studio.test/');page.evaluate('LayerEditor.ready')

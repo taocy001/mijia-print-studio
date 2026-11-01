@@ -39,16 +39,20 @@ with sync_playwright() as p:
    page.wait_for_timeout(600);assert page.evaluate('savedImages.length')==0
    image.dispatch_event('pointerup',{'pointerId':1})
    image.dispatch_event('pointerdown',{'pointerId':1,'isPrimary':True,'button':0,'clientX':100,'clientY':100})
-   page.wait_for_function('savedImages.length===1');image.dispatch_event('pointerup',{'pointerId':1})
+   page.wait_for_selector('#imageSaveDialog[open]');assert page.evaluate('savedImages.length')==0;image.dispatch_event('pointerup',{'pointerId':1});page.locator('#imageSaveConfirm').click();page.wait_for_function('savedImages.length===1')
    image.dispatch_event('contextmenu');page.wait_for_timeout(100);assert page.evaluate('savedImages.length')==1
-   page.evaluate("nativeEvent({type:'imageSaved',value:'cancelled'})")
-   image.focus();page.keyboard.press('Enter');page.wait_for_function('savedImages.length===2')
+   page.evaluate("nativeEvent({type:'imageSaved',value:'error'})");assert page.locator('#imageSaveError').inner_text();page.locator('#imageSaveCancel').click()
+   image.focus();page.keyboard.press('Enter');page.locator('#imageSaveConfirm').click();page.wait_for_function('savedImages.length===2')
    page.evaluate("nativeEvent({type:'imageSaved',value:'saved'})")
-   assert page.locator('#toast').inner_text()=='图片已保存'
+   assert page.locator('#toast').inner_text()=='图片已保存到相册'
   else:
-   with page.expect_download() as download:image.dispatch_event('contextmenu')
+   image.dispatch_event('contextmenu');assert page.locator('#imageSaveDialog').is_visible()
+   with page.expect_download() as download:page.locator('#imageSaveConfirm').click()
    item=download.value;assert item.suggested_filename=='mijia-photo-1.jpg'
    assert Image.open(item.path()).size==(1216,1824)
+  page.evaluate('ImageExport.open(1)');assert '第 2 / 2 张' in page.locator('#imageSaveDialog').inner_text()
+  page.keyboard.press('Escape');assert not page.locator('#imageSaveDialog').is_visible();assert page.evaluate("sheetKind==='confirm'&&pendingPrint.pages.length===2")
+  page.evaluate('ImageExport.open(0)');page.evaluate('goBack()');assert not page.locator('#imageSaveDialog').is_visible();assert page.evaluate("sheetKind==='confirm'")
   assert not errors,errors
   page.close()
  browser.close()
