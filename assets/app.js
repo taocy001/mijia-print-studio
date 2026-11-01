@@ -187,8 +187,8 @@ function updateStatus(){
  $('dockMeta').textContent=`${PAPER[state.media][0]} · ${LabelBatch.enabled()?LabelBatch.pages()+' 张姓名贴':state.mode==='collage'?Math.min(6,state.photos.length)+' 张拼成 1 张':state.media===5014?'上下两幅 · 1 张':'单张打印'}`;
  const d=native.device||{},fresh=d.connected&&(Date.now()-d.checkedAt<60000);
  $('deviceText').textContent=native.busy?(native.unresolved?native.message:'正在读取打印机状态'):fresh?`蓝牙可用${d.alert&&d.alert!=='::0'?' · 设备有告警':d.state==='30'?' · 待机':' · 按需连接'}`:'点击检测打印机';
- const j=displayJob();window.PrintProcess?.update(j);if(sheetKind==='job'&&$('liveJobMessage'))$('liveJobMessage').textContent=j.message||'暂无任务';$('jobBanner').hidden=!j.token||['done','cancelled'].includes(j.phase);
- if(j.token){$('jobLabel').textContent=j.message||native.message;const indeterminate=j.progress<0&&!['done','cancelled','aborted','rejected','held','uncertain','blocked'].includes(j.phase);$('jobProgress').classList.toggle('indeterminate',indeterminate);$('jobProgress').style.width=indeterminate?'35%':Math.max(0,j.progress||0)+'%';$('jobAction').textContent=native.unresolved?'检查任务':'详情';}
+ const j=displayJob();window.PrintProcess?.update({...j,message:printMessage(j)});if(sheetKind==='job'&&$('liveJobMessage'))$('liveJobMessage').textContent=printMessage(j)||'暂无任务';$('jobBanner').hidden=!j.token||['done','cancelled'].includes(j.phase)||(!native.unresolved&&['rejected','aborted'].includes(j.phase)&&failureAcknowledged(j));
+ if(j.token){$('jobLabel').textContent=printMessage(j).split('。')[0]||native.message;const indeterminate=j.progress<0&&!['done','cancelled','aborted','rejected','held','uncertain','blocked'].includes(j.phase);$('jobProgress').classList.toggle('indeterminate',indeterminate);$('jobProgress').style.width=indeterminate?'35%':Math.max(0,j.progress||0)+'%';$('jobAction').textContent=native.unresolved?'检查任务':'详情';}
  for(const item of native.history||[])if(item.token!==native.job?.token&&jobNotifications.has(item.token)&&['done','cancelled','aborted','rejected'].includes(item.phase))notifyJobCompletion(item);
  notifyJobCompletion(native.job);showPrintFailure();
 }
@@ -204,7 +204,7 @@ function openSheet(kind,title,html){
  const samePanel=sheetKind===kind&&!$('sheet').hidden,scroll=samePanel?$('sheetBody').scrollTop:0,sheetScroll=samePanel?$('sheet').scrollTop:0,focused=samePanel&&$('sheetBody').contains(document.activeElement)?document.activeElement:null;
  const focusId=focused?.id,selection=focused&&typeof focused.selectionStart==='number'?[focused.selectionStart,focused.selectionEnd]:null;
  $('sheet').setAttribute('aria-modal','true');$('sheet').dataset.kind=kind;$('settingsBack').hidden=!['device','paper','sharing','coat','workType','history','historyDetail','job','models','qr','camera'].includes(kind);document.body.classList.remove('layer-editing');$('sheet').classList.remove('layer-sheet','emoji-sheet');sheetKind=kind;$('sheetTitle').textContent=title;$('sheetBody').innerHTML=html;$('sheet').hidden=false;$('scrim').hidden=false;document.body.style.overflow='hidden';icons($('sheet'));$('sheetBody').querySelectorAll('[data-close]').forEach(b=>b.remove());if(window.Drawer)Drawer.open(kind,samePanel);
- if(kind==='job')window.PrintProcess?.mount($('sheetBody'),displayJob());
+ if(kind==='job'){const job=displayJob();window.PrintProcess?.mount($('sheetBody'),{...job,message:printMessage(job)});}
  if(focusId&&$(focusId)){try{$(focusId).focus({preventScroll:true});if(selection)$(focusId).setSelectionRange(...selection);}catch(e){}}
  $('sheet').scrollTop=sheetScroll;$('sheetBody').scrollTop=scroll;
 }
@@ -245,6 +245,32 @@ function deviceSignature(){const d=native.device||{};return JSON.stringify([d.co
 function refreshDeviceSheet(){if(sheetKind==='device'&&deviceSheetSignature!==deviceSignature())openDevice();}
 async function deviceAction(button,method,...args){button.disabled=true;try{await bridge(method,...args);}catch(e){toast(e.message||'操作未完成');}poll();if(sheetKind==='device')openDevice();else if(sheetKind==='paper')openPaper();}
 function openDevice(){deviceSheetSignature=deviceSignature();const d=native.device||{};openSheet('device','你的打印机',`<div class="info-row"><span>设备</span><strong>米家桌面照片机 2</strong></div><div class="info-row"><span>连接</span><strong>${native.busy?'正在处理，请稍候':d.released?'本机访问已暂停':d.connected?'蓝牙可用 · 按需连接':'尚未读取状态'}</strong></div><div class="info-row"><span>检测到的相纸</span><strong>${detectedPaper()?PAPER[detectedPaper()][0]:'待识别'}</strong></div><div class="info-row"><span>色带余量</span><strong>${d.ribbon>=0?d.ribbon+' 张':'等待设备提供有效读数'}</strong></div>${d.alert&&d.alert!=='::0'?`<p class="hint">设备告警：${esc(d.alert)}</p>`:''}<button class="full-button" id="connectNow" ${native.busy?'disabled':''}>${icon('printer')} 检测打印机</button><button class="full-button secondary-button" id="changePaper">相纸与拼接</button>${!native.device?.released?'<button class="full-button secondary-button" id="releaseBluetooth">暂停本机蓝牙访问</button>':''}${detectedPaper()===5012?'<button class="full-button secondary-button" id="airprintLayout">AirPrint：'+(native.airprintSplice?'两张四寸拼接':'整张六寸')+'</button>':''}<button class="full-button secondary-button" id="systemBluetooth">打开系统蓝牙设置</button><p class="hint">请保持打印机开机，并在系统蓝牙中完成配对。</p>`);}
+function printMessage(job={}){
+ const message=job.message||'';
+ const guidance={
+  'AirPrint 相纸设置与实际纸盒不一致':'发送设备选择的纸张尺寸与打印机相纸不同，本次未打印。请在“打印机与连接”中点击“检测打印机”，再在发送设备重新选择打印机并核对纸张尺寸。',
+  '纸盒与选择的相纸不一致，请核对后重试':'相纸已变化，当前照片未打印。请重新检测相纸，再预览并提交打印。',
+  'AirPrint 照片格式不支持':'发送的文件格式不受支持。请改用 JPEG 照片或 PDF 文件。',
+  'AirPrint 处理期间连接或相纸已变化，请重新检查':'准备照片时，连接状态或相纸发生变化，本次未打印。请重新检测打印机并核对相纸，再发送照片。'
+ };
+ if(guidance[message])return guidance[message];
+ if(message.startsWith('AirPrint 请求不支持：')){
+  const reason=message.slice('AirPrint 请求不支持：'.length);
+  return ({
+   'One copy per job':'当前 AirPrint 每次支持一份，请将份数设为 1，并关闭“每页多张”后重新发送。',
+   'Splice requires JPEG or PDF':'4 寸拼接请发送 JPEG 照片或 PDF 文件。',
+   'Unsupported scaling':'缩放请选择“适合纸张”或“填满纸张”后重新发送。',
+   'Page ranges unsupported':'暂不支持选择页码范围，请先导出需要打印的页面，再发送文件。',
+   'Photographic media required':'纸张类型请选择照片纸后重新发送。'
+  })[reason]||'发送设备的打印设置不兼容。请恢复默认打印设置重试，或改用 App、网页打印。';
+ }
+ return message;
+}
+function failureAcknowledged(job){
+ const key=[job.token,job.phase,job.message].join('|');
+ if(failureSeen.has(key))return true;
+ try{const seen=JSON.parse(localStorage.getItem('liuying-seen-failures')||'[]');return Array.isArray(seen)&&seen.includes(key);}catch{return false;}
+}
 function displayJob(){const j=native.job||{},f=native.failure||{};return native.unresolved||!f.token||j.token===f.token||(j.createdAt||0)>=(f.createdAt||0)?j:f;}
 const failureSeen=new Set();
 let failureDialog=null;
@@ -253,8 +279,8 @@ function showPrintFailure(extra){
  const candidates=[extra,j,old?null:f].filter(failed);
  for(const j of candidates){const key=[j.token,j.phase,j.message].join('|');if(failureSeen.has(key)||failureDialog?.open)continue;
   let seen=[];try{seen=JSON.parse(localStorage.getItem('liuying-seen-failures')||'[]');}catch(e){}if(seen.includes(key)){failureSeen.add(key);continue;}
-  const dialog=document.createElement('dialog');failureDialog=dialog;dialog.className='print-failure';dialog.setAttribute('aria-labelledby','printFailureTitle');dialog.innerHTML=`<h2 id="printFailureTitle">${['uncertain','blocked'].includes(j.phase)?'请检查打印结果':j.phase==='held'?'打印已暂停':'打印未完成'}</h2><p>${esc(j.message||'打印未完成，请检查打印机')}</p><div><button id="failureHistory">查看记录</button><button id="failureAcknowledge">知道了</button></div>`;
-  document.body.append(dialog);const acknowledge=()=>{failureSeen.add(key);try{localStorage.setItem('liuying-seen-failures',JSON.stringify([...seen,key].slice(-40)));}catch(e){}dialog.close();dialog.remove();failureDialog=null;};
+  const dialog=document.createElement('dialog');failureDialog=dialog;dialog.className='print-failure';dialog.setAttribute('aria-labelledby','printFailureTitle');dialog.innerHTML=`<h2 id="printFailureTitle">${['uncertain','blocked'].includes(j.phase)?'请检查打印结果':j.phase==='held'?'打印已暂停':'打印未完成'}</h2><p>${esc(printMessage(j)||'打印未完成，请检查打印机')}</p><div><button id="failureHistory">查看记录</button><button id="failureAcknowledge">知道了</button></div>`;
+  document.body.append(dialog);const acknowledge=()=>{failureSeen.add(key);try{localStorage.setItem('liuying-seen-failures',JSON.stringify([...seen,key].slice(-40)));}catch(e){}dialog.close();dialog.remove();failureDialog=null;updateStatus();};
   dialog.querySelector('#failureAcknowledge').onclick=acknowledge;dialog.querySelector('#failureHistory').onclick=()=>{acknowledge();openHistory();};dialog.addEventListener('cancel',e=>{e.preventDefault();acknowledge();});dialog.showModal();break;
  }
 }
@@ -280,7 +306,7 @@ async function reprintOriginal(job){
  reprintRequests.set(job.token,requestId);reprintInFlight.add(job.token);
  try{const result=JSON.parse(await bridge('reprint',JSON.stringify({token:job.token,requestId,confirmed:true}))||'{}');if(!result.ok)throw Error(result.error||'重印请求未确认，请检查任务');reprintRequests.delete(job.token);try{sessionStorage.removeItem(key);}catch(e){}poll();openJob();}catch(e){toast(e.message);}finally{reprintInFlight.delete(job.token);}
 }
-function openJob(){const j=displayJob();if(j.phase==='queued'){openSheet('job','等待打印',`<p id="liveJobMessage" class="hint">${esc(j.message)}</p><button class="full-button danger-button" id="cancelJob">取消等待中的任务</button>`);return;}openSheet('job','打印进度',`<p id="liveJobMessage" style="line-height:1.9">${esc(j.message||'暂无任务')}</p><div class="info-row"><span>作品</span><strong>${esc(j.title||'照片')}</strong></div><div class="info-row"><span>任务编号</span><strong>${j.jobId||'尚未获得'}</strong></div><div class="info-row"><span>打印数量</span><strong>${j.batchCount||1} 个作品 · 每个 ${j.copies||1} 份</strong></div>${native.unresolved?`<button class="full-button" id="reconcileJob" ${native.busy?'disabled':''}>重新读取任务状态</button>${!j.jobId&&j.phase!=='prepared'?'<button class="full-button secondary-button" id="resolveUnknown">已检查打印机，结束本次记录</button>':''}<button class="full-button danger-button" id="cancelJob">${j.phase==='prepared'?'取消尚未提交的任务':'请求取消任务'}</button><p class="hint">中断后只检查原任务，不会自动重复提交照片。</p>`:'<button class="full-button" data-close>完成</button>'}`);}
+function openJob(){const j=displayJob();if(j.phase==='queued'){openSheet('job','等待打印',`<p id="liveJobMessage" class="hint">${esc(printMessage(j))}</p><button class="full-button danger-button" id="cancelJob">取消等待中的任务</button>`);return;}openSheet('job','打印进度',`<p id="liveJobMessage" style="line-height:1.9">${esc(printMessage(j)||'暂无任务')}</p><div class="info-row"><span>作品</span><strong>${esc(j.title||'照片')}</strong></div><div class="info-row"><span>任务编号</span><strong>${j.jobId||'尚未获得'}</strong></div><div class="info-row"><span>打印数量</span><strong>${j.batchCount||1} 个作品 · 每个 ${j.copies||1} 份</strong></div>${native.unresolved?`<button class="full-button" id="reconcileJob" ${native.busy?'disabled':''}>重新读取任务状态</button>${!j.jobId&&j.phase!=='prepared'?'<button class="full-button secondary-button" id="resolveUnknown">已检查打印机，结束本次记录</button>':''}<button class="full-button danger-button" id="cancelJob">${j.phase==='prepared'?'取消尚未提交的任务':'请求取消任务'}</button><p class="hint">中断后只检查原任务，不会自动重复提交照片。</p>`:'<button class="full-button" data-close>完成</button>'}`);}
 async function preparePrintPages(){
  if(LabelBatch.enabled()){LabelBatch.validate();const pages=[];for(let i=0;i<LabelBatch.pages();i++)pages.push(...await prepareSinglePrintPages(i));return pages;}
  return prepareSinglePrintPages();
@@ -319,7 +345,7 @@ $('sheetBody').addEventListener('click',async e=>{
  else if(b.dataset.setting){changeSetting(b.dataset.setting,b.dataset.value);openLayout();}
  else if(b.dataset.filter){changeSetting('filter',b.dataset.filter);openFilters();}
  else if(b.dataset.paper){if(detectedPaper()!==5012||![5012,5014].includes(+b.dataset.paper))return;state.sixLayout=state.media=+b.dataset.paper;if(state.media===5014&&state.mode==='collage'&&state.collageLayout!=='strip'){state.mode='photo';toast('拼接纸会将前两张照片分别排在上下两幅');}schedule();openPaper();}
- else if(b.dataset.history!==undefined){const j=native.history[+b.dataset.history];openSheet('historyDetail','打印记录',`${j.file?`<div class="confirmation-preview"><img data-history-image="0" src="/private/${esc(j.file)}" alt="打印记录"></div>`:''}<p class="hint">${esc(j.message)} · ${PAPER[j.media]?.[0]||'相纸待识别'}${j.filesCleared?' · 打印文件已清理':''}</p>${j.file?`<button class="full-button" id="importHistory" data-src="/private/${esc(j.file)}" data-media="${j.media}" data-orientation="${j.orientation}">作为新照片继续创作</button>`:''}`);fillHistoryPreviews([j]);if(j.canReprint&&j.phase==='done'&&typeof window.Studio?.reprint==='function'){const pages=j.reprintPages||[{copies:j.copies||1}];$('sheetBody').insertAdjacentHTML('beforeend',`<p class="hint">${pages.length} 页 · ${pages.map((p,i)=>`第 ${i+1} 页 ${p.copies} 份`).join('，')}</p><button class="full-button secondary-button" id="reprintOriginal">按原参数重印</button>`);$('reprintOriginal').onclick=async event=>{event.target.disabled=true;try{await reprintOriginal(j);}finally{event.target.disabled=false;}};}}
+ else if(b.dataset.history!==undefined){const j=native.history[+b.dataset.history];openSheet('historyDetail','打印记录',`${j.file?`<div class="confirmation-preview"><img data-history-image="0" src="/private/${esc(j.file)}" alt="打印记录"></div>`:''}<p class="hint">${esc(printMessage(j))} · ${PAPER[j.media]?.[0]||'相纸待识别'}${j.filesCleared?' · 打印文件已清理':''}</p>${j.file?`<button class="full-button" id="importHistory" data-src="/private/${esc(j.file)}" data-media="${j.media}" data-orientation="${j.orientation}">作为新照片继续创作</button>`:''}`);fillHistoryPreviews([j]);if(j.canReprint&&j.phase==='done'&&typeof window.Studio?.reprint==='function'){const pages=j.reprintPages||[{copies:j.copies||1}];$('sheetBody').insertAdjacentHTML('beforeend',`<p class="hint">${pages.length} 页 · ${pages.map((p,i)=>`第 ${i+1} 页 ${p.copies} 份`).join('，')}</p><button class="full-button secondary-button" id="reprintOriginal">按原参数重印</button>`);$('reprintOriginal').onclick=async event=>{event.target.disabled=true;try{await reprintOriginal(j);}finally{event.target.disabled=false;}};}}
  else if(b.id==='importHistory'){
   if(state.photos.length>=6){toast('最多 6 张照片，请先移除一张');return;}
   const img=new Image();img.src=b.dataset.src;await img.decode();
