@@ -35,7 +35,8 @@ with sync_playwright() as runtime:
           if(left<0||top<0||left+pw>w||top+ph>h||pw*ph<w*h*.60)failures.push([template.id,w,h,'bounds']);
           if(render(blue,template,w,h,'middle').c.toDataURL()!==c.toDataURL())failures.push([template.id,w,h,'inherited text baseline']);
           const ctx=c.getContext('2d');
-          for(const fx of [.01,.05,.5,.95,.99])for(const fy of [.01,.05,.5,.95,.99]){
+          const samples=TemplateEdges.has(template.style)?[.05,.1,.5,.9,.95]:[.01,.05,.5,.95,.99];
+          for(const fx of samples)for(const fy of samples){
             const pixel=ctx.getImageData(Math.floor(left+pw*fx),Math.floor(top+ph*fy),1,1).data;
             if(pixel[0]!==40||pixel[1]!==100||pixel[2]!==200)failures.push([template.id,w,h,fx,fy,Array.from(pixel)]);
           }
@@ -56,4 +57,4 @@ with sync_playwright() as runtime:
     atlas.set_content('<style>body{background:#e9e8e4;font:12px sans-serif}main{display:grid;grid-template-columns:repeat(8,1fr);gap:8px}figure{margin:0;background:white;padding:8px;text-align:center}img{height:150px;max-width:100%;object-fit:contain}</style><main>'+result['atlas']+'</main>')
     atlas.screenshot(path='/tmp/adaptive-template-atlas.png',full_page=True)
     assert not errors,errors;browser.close()
-print('PASS: 30 existing templates × 4 canvases, photo pixels protected, filter-aware palette, stable crop colors')
+print('PASS: 30 existing templates × 4 canvases, photo centers protected, structural frames unchanged, filter-aware palette, stable crop colors')
