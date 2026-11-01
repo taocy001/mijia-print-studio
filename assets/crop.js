@@ -2,8 +2,8 @@
 window.CropEditor=(()=>{
  const canvas=$('preview');let view=null,frame=null,start=null,previous=null,axis=null,scope='';
  const edges=['top','right','bottom','left'].map(side=>{const edge=document.createElement('div');edge.className='crop-frame-edge';edge.dataset.cropEdge=side;edge.hidden=true;edge.setAttribute('aria-hidden','true');$('paperStage').appendChild(edge);return edge;});
- let frameDrag=null;
- function resetGesture(){start=previous=null;axis=null;frameDrag=null;}
+ let frameDrag=null,target=null,mouse=null,gestureScale=null;
+ function resetGesture(){start=previous=null;axis=null;frameDrag=null;target=mouse=gestureScale=null;}
  function placeEdges(enabled){
   for(const edge of edges)edge.hidden=!enabled;
   if(!enabled||!view)return;
@@ -35,7 +35,7 @@ window.CropEditor=(()=>{
    // Fit the original at 1x; zoom changes the photograph, not the paper's display scale.
    const g=photoGeometry({...frame.p,zoom:1},frame.w,frame.h,frame.fit);
    const x=frame.x+(frame.w-g.dw)/2+g.dx,y=frame.y+(frame.h-g.dh)/2+g.dy;
-   tx=-Math.min(0,x);ty=-Math.min(0,y);cw=Math.ceil(Math.max(w,x+g.dw)+tx);ch=Math.ceil(Math.max(h,y+g.dh)+ty);
+   tx=-Math.min(0,x);ty=-Math.min(0,y);cw=Math.ceil(Math.max(w,x+g.dw)+tx-1e-7);ch=Math.ceil(Math.max(h,y+g.dh)+ty-1e-7);
    if((document.body.classList.contains('landscape')||(!!window.BrowserTransport&&innerWidth>=1000&&matchMedia('(pointer:fine)').matches))){const r=$('board').getBoundingClientRect();width=Math.min(r.width/cw,r.height/ch)*cw;stage.style.width=width+'px';}
    else{stage.style.removeProperty('width');width=stage.clientWidth||411;}
   }else{
@@ -56,24 +56,24 @@ window.CropEditor=(()=>{
   ctx.restore();const movable=complete&&!peek&&photoGeometry(frame.p,frame.w,frame.h,frame.fit);placeEdges(!!movable&&(movable.ex>.5||movable.ey>.5));$('spliceGuide').hidden=true;$('gestureHint').textContent=frame?(canvas.classList.contains('photo-draggable')?'拖动调整打印区域 · 双指缩放':'上下滑动浏览 · 双指缩放'):'上下滑动浏览';
  }
  function toPaper(e){const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*canvas.width/r.width-(view?.tx||0),y:(e.clientY-r.top)*canvas.height/r.height-(view?.ty||0)};}
- function geometry(touches){const p=Array.from(touches,t=>toPaper(t));return !p.length?null:p.length===1?{...p[0],d:0,n:1}:{x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2,d:Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y),n:2};}
+ function beginGesture(){const r=canvas.getBoundingClientRect();gestureScale={x:canvas.width/r.width,y:canvas.height/r.height};}
+ function gesturePoint(e){return {x:e.clientX*gestureScale.x,y:e.clientY*gestureScale.y};}
+ function geometry(touches){const p=Array.from(touches,t=>gesturePoint(t));return !p.length?null:p.length===1?{...p[0],d:0,n:1}:{x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2,d:Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y),n:2};}
  function choose(p){return photoFrames.find(f=>p.x>=f.x&&p.x<=f.x+f.w&&p.y>=f.y&&p.y<=f.y+f.h)||frame;}
- let target=null;
  function move(now,old,multi){if(!target||peek)return;target.p.facePending=false;const {p,w,h,fit}=target,g=photoGeometry(p,w,h,fit),direction=state.mode==='photo'&&[5009,5012].includes(state.media)?-1:1;if(g.ex)p.x=Math.max(-1,Math.min(1,(p.x||0)+direction*(now.x-old.x)/g.ex));if(multi&&g.ey)p.y=Math.max(-1,Math.min(1,(p.y||0)+direction*(now.y-old.y)/g.ey));if(multi&&old.d&&now.d)p.zoom=Math.max(1,Math.min(4,(p.zoom||1)*now.d/old.d));schedule();}
- canvas.addEventListener('touchstart',e=>{if(!view||peek)return;previous=geometry(e.touches);if(e.touches.length===1){start=previous;target=choose(start);axis=target&&canvas.classList.contains('photo-draggable')?'photo':null;if(axis==='photo')e.preventDefault();}else{e.preventDefault();axis='multi';target=target||frame;}},{passive:false});
- canvas.addEventListener('touchmove',e=>{if(!previous||!view)return;const now=geometry(e.touches);if(now.n>1){e.preventDefault();move(now,previous,true);previous=now;axis='multi';return;}
+ canvas.addEventListener('touchstart',e=>{if(!view||peek)return;beginGesture();previous=geometry(e.touches);if(e.touches.length===1){start=previous;target=choose(toPaper(e.touches[0]));axis=target&&canvas.classList.contains('photo-draggable')?'photo':null;if(axis==='photo')e.preventDefault();}else{e.preventDefault();axis='multi';target=target||frame;}},{passive:false});
+ canvas.addEventListener('touchmove',e=>{if(!previous||!view)return;const now=geometry(e.touches);if(now.n!==previous.n){previous=start=now;return;}if(now.n>1){e.preventDefault();move(now,previous,true);previous=now;axis='multi';return;}
   // Native vertical scrolling wins. Horizontal drags are edited directly, without a mode switch.
   if(!axis&&start){const dx=now.x-start.x,dy=now.y-start.y,threshold=8*canvas.width/canvas.clientWidth;if(Math.hypot(dx,dy)>threshold)axis=Math.abs(dx)>Math.abs(dy)*1.2?'horizontal':'scroll';}
   if(axis==='horizontal'||axis==='photo'){e.preventDefault();move(now,previous,axis==='photo');}previous=now;
  },{passive:false});
- canvas.addEventListener('touchend',e=>{previous=geometry(e.touches);if(!previous)resetGesture();else{start=previous;axis=null;}},{passive:true});
+ canvas.addEventListener('touchend',e=>{if(!gestureScale){resetGesture();return;}previous=geometry(e.touches);if(!previous)resetGesture();else{start=previous;axis=target&&canvas.classList.contains('photo-draggable')?'photo':null;}},{passive:true});
  canvas.addEventListener('touchcancel',resetGesture,{passive:true});
  // Mouse drag and wheel keep the desktop-style direct editing path.
- let mouse=null;
- canvas.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0){mouse=toPaper(e);target=choose(mouse);canvas.setPointerCapture(e.pointerId);}});
- canvas.addEventListener('pointermove',e=>{if(mouse){const p=toPaper(e);move(p,mouse,true);mouse=p;}});
+ canvas.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse'&&e.button===0){beginGesture();mouse=gesturePoint(e);target=choose(toPaper(e));canvas.setPointerCapture(e.pointerId);}});
+ canvas.addEventListener('pointermove',e=>{if(mouse){const p=gesturePoint(e);move(p,mouse,true);mouse=p;}});
  for(const event of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(event,()=>mouse=null);
  canvas.addEventListener('wheel',e=>{if(!e.ctrlKey||!frame)return;e.preventDefault();frame.p.facePending=false;frame.p.zoom=Math.max(1,Math.min(4,(frame.p.zoom||1)*(e.deltaY>0?.9:1.1)));schedule();},{passive:false});
- window.addEventListener('resize',()=>{render();LayerEditor.refresh();});
+ window.addEventListener('resize',()=>{resetGesture();render();LayerEditor.refresh();});
  schedule();return {render,geometry:()=>view,toPaper};
 })();
