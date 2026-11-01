@@ -6,7 +6,7 @@ sys.path.insert(0,str(root))
 from build import JDK,SDK,TOOLS,ANDROID
 out=root/'build/queue-tests';out.mkdir(parents=True,exist_ok=True)
 def run(*args):return subprocess.run([str(a) for a in args],check=True,env={**os.environ,'JAVA_HOME':str(JDK)})
-instruments=['WebJobsInstrument','WebSessionsInstrument']
+instruments=['WebJobsInstrument','WebSessionsInstrument','HistoryStorageInstrument']
 manifest=out/'AndroidManifest.xml';manifest.write_text('<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="local.liuying.studio.tests"><uses-sdk android:minSdkVersion="31" android:targetSdkVersion="36"/><application android:label="留影测试" android:debuggable="true"/>'+''.join(f'<instrumentation android:name="local.liuying.studio.{name}" android:targetPackage="local.liuying.studio"/>' for name in instruments)+'</manifest>')
 classes=out/'classes';dex=out/'dex'
 for directory in (classes,dex):shutil.rmtree(directory,ignore_errors=True);directory.mkdir()
