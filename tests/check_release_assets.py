@@ -13,8 +13,9 @@ for file in (assets/'emoji').glob('*.svg'):
   assert not any(k.startswith('on') or 'href' in k for k in e.attrib),file
 catalog=json.loads((assets/'emoji-catalog.js').read_text().split('=',1)[1].rstrip(';\n'))
 assert {v['code']+'.svg' for group in catalog.values() for v in group}=={p.name for p in (assets/'emoji').glob('*.svg')}
-for name in ['Project-MIT.txt','THIRD_PARTY.md','Twemoji-CC-BY-4.0.txt','Calendar-Lunar-MIT.txt','Calendar-Holidays-MIT.txt','Bluetooth-MIT.txt']:
+for name in ['Project-MIT.txt','THIRD_PARTY.md','Twemoji-CC-BY-4.0.txt','Calendar-Lunar-MIT.txt','Calendar-Holidays-MIT.txt','Bluetooth-MIT.txt','QR-Code-MIT.txt']:
  assert (assets/'licenses'/name).is_file(),name
+assert (assets/'licenses/QR-Code-MIT.txt').read_bytes()==(root/'licenses/QR-Code-MIT.txt').read_bytes()
 assert (assets/'licenses/Project-MIT.txt').read_bytes()==(root/'LICENSE').read_bytes()
 assert (assets/'licenses/THIRD_PARTY.md').read_bytes()==(root/'THIRD_PARTY.md').read_bytes()
 for p in [*assets.glob('*.js'),*root.glob('src/*.java'),root/'AndroidManifest.xml']:
