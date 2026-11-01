@@ -46,7 +46,7 @@ window.StudioExtras=(()=>{
   else single(first,0,h);
  }
  const originalLayout=openLayout;
- openLayout=function(){originalLayout();const body=$('sheetBody');
+ openLayout=function(){const same=sheetKind==='layout'&&!$('sheet').hidden,scroll=same?$('sheetBody').scrollTop:0,sheetScroll=same?$('sheet').scrollTop:0;originalLayout();const body=$('sheetBody');
   if(state.mode==='calendar')body.insertAdjacentHTML('beforeend',`<div class="field"><label>月历版式</label>${state.media===5014?'上半本月、下半下月':segments('calendarLayout',[['photo','照片月历'],['plain','纯月历']])}</div><label class="coat-switch"><span>农历与节气</span><input id="lunarToggle" type="checkbox" ${state.lunar?'checked':''}></label>`);
   if(state.mode==='collage')body.insertAdjacentHTML('beforeend',`<div class="field"><label>拼图布局</label>${segments('collageLayout',state.media===5014?[['strip','照片条']]:[['auto','自动'],['vertical','上下'],['horizontal','左右'],['grid','网格'],['strip','照片条']])}</div>`);
   if(state.mode==='label')body.insertAdjacentHTML('beforeend',`<div class="field"><label>姓名贴间隙 <span id="nameGapValue">${state.nameGap==null?'默认':state.nameGap+' mm'}</span></label><input id="nameGapInput" type="range" min="0" max="5" step="0.1" value="${state.nameGap??1.5}"><button id="resetNameGap" class="secondary-button">恢复默认间隙</button></div><div class="field"><label>姓名贴风格</label><div id="nameTemplateChoices">${NameLabels.options()}</div></div><button id="extraText" class="full-button secondary-button">编辑姓名与小字</button>`);
@@ -57,6 +57,7 @@ window.StudioExtras=(()=>{
   if($('nameGapInput'))$('nameGapInput').oninput=e=>{state.nameGap=+e.target.value;$('nameGapValue').textContent=state.nameGap+' mm';schedule();clearTimeout(window.nameChoiceTimer);window.nameChoiceTimer=setTimeout(()=>{if($('nameTemplateChoices'))$('nameTemplateChoices').innerHTML=NameLabels.options();},150);};
   if($('resetNameGap'))$('resetNameGap').onclick=()=>{delete state.nameGap;schedule();openLayout();};
   if($('extraText'))$('extraText').onclick=openLegacyText;if($('lunarToggle'))$('lunarToggle').onchange=e=>{state.lunar=e.target.checked;schedule();};
+  if(same){const content=body.lastElementChild;body.scrollTop=scroll;$('sheet').scrollTop=sheetScroll;requestAnimationFrame(()=>{if(sheetKind==='layout'&&body.lastElementChild===content){body.scrollTop=scroll;$('sheet').scrollTop=sheetScroll;}});}
 
  };
  const originalMenu=$('menuBtn').onclick;$('menuBtn').onclick=()=>{originalMenu();$('sheetBody').insertAdjacentHTML('beforeend',`<div class="menu-row copies-row">${icon('copy')}<span>打印份数</span><div class="copies-stepper"><button id="copiesMinus" aria-label="减少打印份数">${icon('minus')}</button><output id="copiesValue" aria-live="polite"></output><button id="copiesPlus" aria-label="增加打印份数">${icon('plus')}</button></div></div><button class="menu-row" id="menuCoat">${icon('spark')}<span>覆膜纹理</span>${icon('chevron')}</button>`);
