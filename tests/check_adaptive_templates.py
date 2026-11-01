@@ -17,13 +17,14 @@ with sync_playwright() as runtime:
     result=page.evaluate('''async()=>{
       const photo=async(color)=>{const c=document.createElement('canvas');c.width=600;c.height=900;const x=c.getContext('2d');x.fillStyle=color;x.fillRect(0,0,600,900);const p={src:c.toDataURL(),filter:'none',zoom:1,x:0,y:0,turn:0,fit:'cover',border:0,overlays:[]};await loadPhoto(p);return p;};
       const red=await photo('#d22d3c'),blue=await photo('#2864c8');state.photos=[red,blue];state.active=0;
-      const render=(p,t,w,h)=>{const e=OriginalTemplates.variant(t,w,h),c=document.createElement('canvas');c.width=w;c.height=h;OriginalTemplates.paint(c.getContext('2d'),p,0,0,w,h,e);return {e,c};};
+      const render=(p,t,w,h,baseline='alphabetic')=>{const e=OriginalTemplates.variant(t,w,h),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').textBaseline=baseline;OriginalTemplates.paint(c.getContext('2d'),p,0,0,w,h,e);return {e,c};};
       const edge=p=>Array.from(render(p,TEMPLATE_CATALOG[0],1040,1040).c.getContext('2d').getImageData(1,1,1,1).data).slice(0,3);
       const mixCanvas=document.createElement('canvas');mixCanvas.width=600;mixCanvas.height=900;const mx=mixCanvas.getContext('2d');
       for(const [x,w,color] of [[0,240,'#d22d3c'],[240,220,'#dddddd'],[460,140,'#2864c8']]){mx.fillStyle=color;mx.fillRect(x,0,w,900);}
       const mixed={...red,src:mixCanvas.toDataURL()};await loadPhoto(mixed);const mixedEdge=edge(mixed);
       const redEdge=edge(red),blueEdge=edge(blue);red.filter='bw';const bw=edge(red);red.filter='sepia';const sepia=edge(red);red.filter='none';
       const restored=edge(red);red.zoom=2;red.x=.7;red.y=-.5;const moved=edge(red);red.zoom=1;red.x=red.y=0;
+      if(TEMPLATE_CATALOG.length!==20)throw Error('Expected 20 original templates');
       const failures=[],tiles=[];
       for(const template of TEMPLATE_CATALOG){
         const a=OriginalTemplates.variant(template,1216,1824),b=OriginalTemplates.variant(template,1824,1216);
@@ -31,6 +32,7 @@ with sync_playwright() as runtime:
         for(const [w,h] of [[1216,1824],[1824,1216],[1040,1040],[1216,912]]){
           const {e,c}=render(blue,template,w,h),{left,top}=e.margin,{width:pw,height:ph}=e.crop;
           if(left<0||top<0||left+pw>w||top+ph>h||pw*ph<w*h*.60)failures.push([template.id,w,h,'bounds']);
+          if(render(blue,template,w,h,'middle').c.toDataURL()!==c.toDataURL())failures.push([template.id,w,h,'inherited text baseline']);
           const ctx=c.getContext('2d');
           for(const fx of [.01,.05,.5,.95,.99])for(const fy of [.01,.05,.5,.95,.99]){
             const pixel=ctx.getImageData(Math.floor(left+pw*fx),Math.floor(top+ph*fy),1,1).data;
@@ -53,4 +55,4 @@ with sync_playwright() as runtime:
     atlas.set_content('<style>body{background:#e9e8e4;font:12px sans-serif}main{display:grid;grid-template-columns:repeat(8,1fr);gap:8px}figure{margin:0;background:white;padding:8px;text-align:center}img{height:150px;max-width:100%;object-fit:contain}</style><main>'+result['atlas']+'</main>')
     atlas.screenshot(path='/tmp/adaptive-template-atlas.png',full_page=True)
     assert not errors,errors;browser.close()
-print('PASS: 16 templates × 4 canvases, photo pixels protected, filter-aware palette, stable crop colors')
+print('PASS: 20 templates × 4 canvases, photo pixels protected, filter-aware palette, stable crop colors')
