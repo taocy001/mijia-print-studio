@@ -26,6 +26,8 @@ public final class MainActivity extends Activity {
     private boolean picking,sharingAirPrint;
     private int pickLimit=6;
     private ValueCallback<Uri[]> textFileCallback;
+    private final java.util.concurrent.atomic.AtomicBoolean savingProject=new java.util.concurrent.atomic.AtomicBoolean();
+    private volatile byte[] pendingProject;
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
         try{Store.recover(this);}catch(Exception e){android.util.Log.w("LiuyingPrint","Recovery state could not be saved");}
@@ -66,8 +68,8 @@ public final class MainActivity extends Activity {
             @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){
                 if(textFileCallback!=null){callback.onReceiveValue(null);return true;}
                 textFileCallback=callback;
-                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/*");
-                intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"text/plain","text/csv","application/csv"});
+                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
+                intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"text/plain","text/csv","application/csv","application/json"});intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,false);
                 try{startActivityForResult(intent,12);}catch(ActivityNotFoundException e){textFileCallback=null;callback.onReceiveValue(null);event("toast","无法打开文件选择器");}
                 return true;
             }
@@ -82,6 +84,7 @@ public final class MainActivity extends Activity {
         if(web!=null)web.setBackgroundColor(color);
     }
     private void event(String type,Object value){main.post(()->{if(web!=null)try{web.evaluateJavascript("window.nativeEvent&&window.nativeEvent("+new JSONObject().put("type",type).put("value",value)+")",null);}catch(Exception ignored){}});}
+    private void projectError(String message){try{event("projectError",new JSONObject().put("message",message));}catch(Exception ignored){}}
     private boolean granted(){return checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)==PackageManager.PERMISSION_GRANTED&&checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)==PackageManager.PERMISSION_GRANTED;}
     private void check(){
         if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},7);return;}
@@ -108,6 +111,23 @@ public final class MainActivity extends Activity {
         if(web!=null)web.post(()->web.evaluateJavascript("window.updateEditorOrientation&&window.updateEditorOrientation()",null));
     }
     private final class Bridge {
+        @JavascriptInterface public String saveProject(String json){
+            if(!savingProject.compareAndSet(false,true))return "{\"error\":\"已有作品正在保存\"}";
+            try{pendingProject=ProjectFiles.projectBytes(json);}
+            catch(Exception|OutOfMemoryError error){pendingProject=null;savingProject.set(false);return "{\"error\":\"作品包无效或超过 32 MB\"}";}
+            main.post(()->{
+                if(isFinishing()||isDestroyed()){pendingProject=null;savingProject.set(false);projectError("保存已取消");return;}
+                Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType("application/json").putExtra(Intent.EXTRA_TITLE,"mijia-project.json");
+                try{startActivityForResult(intent,13);}
+                catch(Exception error){pendingProject=null;savingProject.set(false);projectError("无法打开保存位置");}
+            });
+            return "{\"ok\":true}";
+        }
+        @JavascriptInterface public String importProjectImage(String base64){
+            try{return ProjectFiles.importImage(MainActivity.this,base64).toString();}
+            catch(Exception|OutOfMemoryError error){return "{\"error\":\"无法导入作品照片，请检查 JPEG 格式、大小和尺寸\"}";}
+        }
         @JavascriptInterface public String sharingState(){return SharingService.sharingState().toString();}
         @JavascriptInterface public void startSharing(){main.post(()->{sharingAirPrint=false;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
         @JavascriptInterface public void startAirPrint(){main.post(()->{sharingAirPrint=true;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
@@ -193,8 +213,20 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
+        if(request==13){
+            byte[] bytes=pendingProject;pendingProject=null;
+            if(bytes==null){savingProject.set(false);return;}
+            if(result!=RESULT_OK){savingProject.set(false);try{event("projectSaved",new JSONObject().put("cancelled",true));}catch(Exception ignored){}return;}
+            Uri uri=data==null?null:data.getData();
+            Thread writer=new Thread(()->{
+                try{ProjectFiles.write(MainActivity.this,uri,bytes);event("projectSaved",new JSONObject().put("cancelled",false));}
+                catch(Exception error){projectError("作品保存失败，请重新选择保存位置");}
+                finally{savingProject.set(false);}
+            },"liuying-project-save");
+            try{writer.start();}catch(RuntimeException|OutOfMemoryError error){savingProject.set(false);projectError("无法启动作品保存，请重试");}return;
+        }
         if(request==12){ValueCallback<Uri[]> callback=textFileCallback;textFileCallback=null;
-            Uri uri=result==RESULT_OK&&data!=null?data.getData():null;
+            Uri uri=result==RESULT_OK&&data!=null&&(data.getClipData()==null||data.getClipData().getItemCount()<=1)?data.getData():null;
             if(callback!=null)callback.onReceiveValue(uri!=null&&"content".equals(uri.getScheme())?new Uri[]{uri}:null);return;}
         if(request!=10&&request!=11)return;picking=false;
         if(result!=RESULT_OK||data==null)return;
@@ -219,5 +251,5 @@ public final class MainActivity extends Activity {
         },"liuying-import").start();
     }
     @Override public void onBackPressed(){web.evaluateJavascript("window.goBack?window.goBack():false",value->{if(!"true".equals(value))super.onBackPressed();});}
-    @Override protected void onDestroy(){if(textFileCallback!=null){textFileCallback.onReceiveValue(null);textFileCallback=null;}if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){pendingProject=null;savingProject.set(false);if(textFileCallback!=null){textFileCallback.onReceiveValue(null);textFileCallback=null;}if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
 }

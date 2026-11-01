@@ -1,7 +1,7 @@
 /* Local native segmentation; cached variants never replace the original photo. */
 window.CutoutEditor=(()=>{
  const pending=new Map(),colors=[['','原底色'],['white','白底'],['blue','蓝底'],['red','红底']];
- function path(value){return typeof value==='string'&&/^\/private\/cutouts\/u2netp-v1-[a-f0-9]{64}-(white|blue|red)\.jpg$/.test(value);}
+ function path(value){return typeof value==='string'&&/^\/private\/(?:cutouts\/u2netp-v1-[a-f0-9]{64}-(?:white|blue|red)|photos\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\.jpg$/.test(value);}
  async function loadVariant(p,color){if(!color)return;const src=p.idCutouts?.[color];if(!path(src))throw Error('抠图结果不可用');await loadPhoto({src});}
  async function applyResult(p,job){let color;do{color=job.wanted;await loadVariant(p,color);}while(color!==job.wanted);p.idBackground=color;}
  const ready=Promise.all(state.photos.map(async p=>{if(!p.idBackground)return;try{await loadVariant(p,p.idBackground);if(!images.has(p.idCutouts?.[p.idBackground]))throw Error('missing cutout');}catch{p.idBackground='';p.idCutouts={};toast('抠图缓存不可用，已恢复原底色，请重新选择底色');}})).then(schedule);
