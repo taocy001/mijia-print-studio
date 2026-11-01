@@ -1,0 +1,5 @@
+.edit-history-row{display:flex;align-items:center;gap:8px}
+.edit-history-row>span{flex:1}
+.edit-history-row button{display:grid;place-items:center;width:44px;height:44px;border:1px solid var(--line);border-radius:12px;background:transparent;color:var(--ink)}
+.edit-history-row button:disabled{opacity:.3}
+.edit-history-row button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}

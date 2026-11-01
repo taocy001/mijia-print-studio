@@ -4,6 +4,12 @@ window.EffectBrowser=(()=>{
  group.id='effectTools';group.hidden=true;group.setAttribute('role','group');group.setAttribute('aria-label','切换效果');
  group.innerHTML=`<button id="effectPrev" aria-label="上一个效果" title="上一个效果">${icon('chevron')}</button><span id="effectName" role="status" aria-live="polite"></span><button id="effectNext" aria-label="下一个效果" title="下一个效果">${icon('chevron')}</button><button id="effectAll" aria-label="全部效果" title="全部效果">${icon('layout')}</button><button id="effectDone" aria-label="完成效果选择" title="完成">${icon('check')}</button>`;bar.append(group);
  let mode='',photo=null,gesture=null,mouse=null,animation=null,lastEffect='',lastScope='',geometryScope='',lastActivation=null,activationTimer=0;
+ function markDrawer(){
+  const current=sheetKind==='layers'?($('sheetTitle').textContent.includes('表情')?'addEmojiQuick':'addTextQuick'):{layout:'layoutBtn',filters:'filterBtn',templates:'templateBtn',text:'addTextQuick'}[sheetKind];
+  for(const button of document.querySelectorAll('.tool-tabs button'))button.classList.toggle('drawer-selected',!active()&&!$('sheet').hidden&&button.id===current);
+ }
+ new MutationObserver(markDrawer).observe($('sheet'),{attributes:true,attributeFilter:['hidden','data-kind']});
+ new MutationObserver(markDrawer).observe($('sheetTitle'),{childList:true,subtree:true,characterData:true});
  const originalLabel=canvas.getAttribute('aria-label');canvas.tabIndex=0;
  const active=()=>!!mode,kind=()=>mode;
  const buttons={layout:'layoutBtn',filters:'filterBtn',templates:'templateBtn'},labels={layout:'排版',filters:'色调',templates:'模板'};
@@ -29,7 +35,7 @@ window.EffectBrowser=(()=>{
   for(const [id,k] of [['layoutBtn','layout'],['filterBtn','filters'],['templateBtn','templates']])$(id).setAttribute('aria-pressed',String(k===mode));
   const signature=mode+'|'+current();
   if(signature!==lastEffect&&scope===lastScope&&!matchMedia('(prefers-reduced-motion:reduce)').matches){animation?.cancel();animation=canvas.animate([{opacity:.85},{opacity:1}],{duration:130,easing:'ease-out'});}
-  lastEffect=signature;lastScope=scope;
+  lastEffect=signature;lastScope=scope;markDrawer();
  }
  function toggle(next){
   clearTimeout(activationTimer);activationTimer=0;
@@ -46,7 +52,7 @@ window.EffectBrowser=(()=>{
   document.body.classList.remove('effect-browsing');group.hidden=true;canvas.setAttribute('aria-label',originalLabel);CropEditor.resetGesture();LayerEditor.refresh();
   for(const id of ['layoutBtn','filterBtn','templateBtn'])$(id).setAttribute('aria-pressed','false');
   if(restore&&(sheetKind===old||!sheetKind))closeSheet();
-  CropEditor.render();
+  CropEditor.render();markDrawer();
  }
  function beforeSheet(next){if(lastActivation&&next!==lastActivation.kind){clearTimeout(activationTimer);activationTimer=0;lastActivation=null;}if(mode&&next!==mode)exit(false);}
  function step(delta){
@@ -71,7 +77,7 @@ window.EffectBrowser=(()=>{
    return;
   }
   lastActivation=pointer?{kind:next,at:now}:null;
-  const open=()=>{activationTimer=0;lastActivation=null;if(allowed(next)){openGrid(next);refresh();}};
+  const open=()=>{activationTimer=0;lastActivation=null;if(allowed(next)){exit(false);openGrid(next);refresh();}};
   if(pointer)activationTimer=setTimeout(open,300);else open();
  }
  for(const [k,id] of Object.entries(buttons)){$(id).onclick=e=>activate(k,e);$(id).title=labels[k]+' · 单击查看全部，双击左右切换';}
