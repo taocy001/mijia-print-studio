@@ -20,7 +20,7 @@ with sync_playwright() as p:
  page.evaluate("state.photos=[];state.mode='photo';native.device={};state.media=5012")
  page.evaluate("addPhotos([{src:'/private/photos/a.jpg',faces:[[.3,.02,.5,.1]]},{src:'/private/photos/b.jpg',faces:[[.3,.02,.5,.1]]}])")
  assert page.evaluate('state.photos.every(p=>p.facePending&&p.y===0)')
- page.evaluate("selectPhoto(1);$('zoomIn').click();native.device={connected:true,checkedAt:Date.now(),media:5009};syncPaper()")
+ page.evaluate("selectPhoto(1);render();$('zoomIn').click();native.device={connected:true,checkedAt:Date.now(),media:5009};syncPaper()")
  assert page.evaluate('state.photos[0].y>0.5&&!state.photos[0].facePending'),page.evaluate('state.photos')
  assert page.evaluate('state.photos[1].zoom>1&&state.photos[1].y===0&&!state.photos[1].facePending')
  page.evaluate("selectPhoto(0);openFilters();$('toneSharp').value=1;$('toneSharp').dispatchEvent(new Event('change'))")
