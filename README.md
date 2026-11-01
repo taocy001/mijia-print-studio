@@ -134,7 +134,7 @@ build/venv/bin/python -m unittest discover -s tests -p 'test_*.py'
 python3 tests/check_release_assets.py
 ```
 
-浏览器测试需 Playwright 与浏览器，参见 `tests/check_desktop_web.py`、`tests/check_ui_parity.py`。设备测试需 ADB 和已安装的 App；运行前保存草稿。回归测试不自动实物打印，合成色卡生成器位于 `tests/generate_print_charts.py` 和 `tests/generate_square_chart.py`。
+浏览器测试需 Playwright 与浏览器，参见 `tests/check_desktop_web.py`、`tests/check_ui_parity.py`。`tests/check_output_contract.py` 检查共享编辑器输出；`tests/test_output_contract.py` 检查桌面 JPEG、PDF、拼接和覆膜像素，PDF 用例需对应平台渲染器。设备测试需 ADB 和已安装的 App；运行前保存草稿。回归测试不自动实物打印，合成色卡生成器位于 `tests/generate_print_charts.py` 和 `tests/generate_square_chart.py`。
 
 ## 许可
 
