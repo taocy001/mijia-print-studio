@@ -93,6 +93,14 @@ class Models(unittest.IsolatedAsyncioTestCase):
         req._read_bytes=b'{"id":"test"}'
         return req
 
+    async def test_state_advertises_capabilities_without_admin_privilege(self):
+        core=SimpleNamespace(data=self.root,simulate=True,jobs=[],public=lambda job:job,airprint_splice=False,device={})
+        studio=Studio(core=core);studio.sessions['test']={'id':'test'}
+        response=await studio.handle(self.request('/api/state',peer='192.168.1.2'))
+        value=json.loads(response.text)
+        self.assertEqual(value['capabilities'],{'models':True,'historyStorage':True})
+        self.assertFalse(value['canManageQueue'])
+
     async def test_api_auth_origin_and_host_only_download(self):
         studio=Studio(core=SimpleNamespace(data=self.root,simulate=True));studio.models=self.store
         studio.sessions['test']={'id':'test'}

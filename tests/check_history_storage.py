@@ -14,7 +14,7 @@ with sync_playwright() as runtime:
             if name=='/api/state':
                 job={'token':'test','phase':'done','createdAt':1,'media':5009,'message':'已完成','canReprint':not cleaned[0],'filesCleared':cleaned[0]}
                 if not cleaned[0]:job['file']='prints/22222222-2222-2222-2222-222222222222.jpg'
-                value={'host':'desktop','permission':True,'device':{},'history':[job]}
+                value={'host':'desktop','capabilities':{'historyStorage':True},'permission':True,'device':{},'history':[job]}
                 if hold[0]:pending.append((r,value));hold[0]=False;return
                 r.fulfill(json=value);return
             if name=='/api/history/storage':r.fulfill(json={'bytes':0 if cleaned[0] else 1048576,'files':0 if cleaned[0] else 2,'jobs':1});return
