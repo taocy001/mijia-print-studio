@@ -22,7 +22,7 @@ with sync_playwright() as p:
  page.evaluate("async()=>{const p={src:'/sample.svg',width:1200,height:800,turn:0,zoom:1,x:0,y:0,fit:'cover',border:0,filter:'none',templateId:null,overlays:[]};state.photos=[{...p},{...p},{...p}];await loadPhoto(p);state.active=0;state.mode='photo';}")
  for media,ratio in [(5009,1),(5012,2/3),(5014,4/3)]:
   page.evaluate('(m)=>{state.media=m;state.orientation="portrait";selectPhoto(0);render()}',media)
-  page.evaluate('closeSheet()');page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===20")
+  page.evaluate('closeSheet()');page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===30")
   actual=page.locator('[data-template] img').first.evaluate('(im)=>im.naturalWidth/im.naturalHeight')
   assert abs(actual-ratio)<.01,(media,actual)
   assert page.locator('#templateOrientation').count()==(1 if media==5012 else 0)
@@ -32,13 +32,13 @@ with sync_playwright() as p:
   assert len(pages)==(2 if media==5014 else 3),pages
   assert all(p==([1040,1040,5009] if media==5009 else [1216,1824,media]) for p in pages),pages
  page.evaluate("state.media=5014;selectPhoto(1);render()")
- page.evaluate('closeSheet()');page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===20");page.locator('[data-template="studio-petal"]').click();page.evaluate('render()')
+ page.evaluate('closeSheet()');page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===30");page.locator('[data-template="studio-petal"]').click();page.evaluate('render()')
  frames=page.evaluate('photoFrames.map(f=>({x:f.x,y:f.y,w:f.w,h:f.h}))')
  assert len(frames)==2 and frames[0]['y']<912 and frames[1]['y']>=912,frames
  assert frames[1]['y']+frames[1]['h']<=1824,frames
  # Selecting either half must not apply its frame to the other half.
  one=page.evaluate('compose().toDataURL()');page.evaluate('selectPhoto(0);render()');two=page.evaluate('compose().toDataURL()');assert one==two
- page.evaluate('closeSheet()');page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===20");page.locator('#noTemplate').click();page.evaluate('render()')
+ page.evaluate('closeSheet()');page.locator('#templateBtn').click();page.wait_for_function("document.querySelectorAll('[data-template] img[src]').length===30");page.locator('#noTemplate').click();page.evaluate('render()')
  assert page.evaluate('state.photos.map(p=>p.templateId)')==[None,'studio-petal',None]
  frames=page.evaluate('photoFrames.map(f=>[f.x,f.y,f.w,f.h])');assert frames[0]==[0,0,1216,912] and frames[1][1]>912,frames
  # Paper changes preserve each photo's choice.
