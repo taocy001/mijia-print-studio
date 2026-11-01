@@ -1,7 +1,6 @@
 (()=>{
  if(window.Studio)return;
  document.documentElement.classList.add("browser-client");
- new ResizeObserver(()=>{document.documentElement.style.setProperty("--browser-dock-height",document.querySelector(".dock").getBoundingClientRect().height+"px");window.CropEditor?.render();}).observe(document.querySelector(".dock"));
  let cached={permission:true,device:{},history:[],message:'正在连接共享服务'},refreshing=false;
  const emit=(type,value)=>window.nativeEvent?.({type,value});
  async function request(path,data,raw=false){const options=data===undefined?{}:{method:'POST',headers:{'Content-Type':raw?'application/octet-stream':'application/json'},body:raw?data:JSON.stringify(data)};const r=await fetch('/api/'+path,{...options,credentials:'same-origin'});if(r.status===401){location.reload();throw Error('请重新配对');}const value=await r.json();if(!r.ok||value.error)throw Error(value.error||'共享服务请求失败');return value;}

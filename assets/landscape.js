@@ -1,6 +1,12 @@
 // Use device orientation, not keyboard height, to choose the editor layout.
 (()=>{
  let frame=0;
+ const dock=document.querySelector('.dock');
+ new ResizeObserver(()=>{
+  const height=dock.getBoundingClientRect().height+'px';
+  if(document.documentElement.style.getPropertyValue('--browser-dock-height')!==height)
+   document.documentElement.style.setProperty('--browser-dock-height',height);
+ }).observe(dock);
  const refresh=()=>{cancelAnimationFrame(frame);frame=requestAnimationFrame(()=>{CropEditor.render();LayerEditor.refresh();});};
  window.updateEditorOrientation=()=>{
   const landscape=window.Studio?.landscape?Studio.landscape():screen.orientation?.type.startsWith('landscape')??(innerWidth>innerHeight);
