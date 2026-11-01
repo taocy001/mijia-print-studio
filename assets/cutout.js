@@ -15,7 +15,7 @@ window.CutoutEditor=(()=>{
   if(!result.ok){toast(result.error||'无法启动本地抠图，请在新版 App 中重试');return;}
   pending.set(p.src,{wanted:color});update();
  }
- const previousLayout=openLayout;openLayout=function(){previousLayout();if(state.mode!=='id')return;const box=document.createElement('div');box.className='field';box.innerHTML='<label>证件照底色</label><div class="segments" id="idBackgroundOptions">'+colors.map(([v,label])=>`<button data-id-background="${v}">${label}</button>`).join('')+'</div><p class="hint" id="cutoutStatus"></p>';$('sheetBody').appendChild(box);box.querySelectorAll('button').forEach(b=>b.onclick=()=>select(b.dataset.idBackground));update();};
+ const previousLayout=openLayout;openLayout=function(){previousLayout();if(state.mode!=='id')return;const box=document.createElement('div');box.className='field';box.innerHTML='<label>证件照底色</label><div class="segments" id="idBackgroundOptions">'+colors.map(([v,label])=>`<button data-id-background="${v}">${label}</button>`).join('')+'</div><p class="hint" id="cutoutStatus"></p>';$('sheetBody').appendChild(box);box.querySelectorAll('button').forEach(b=>b.onclick=()=>select(b.dataset.idBackground));if(window.ModelManager?.available()){const button=document.createElement('button');button.className='menu-row';button.id='modelsMenu';button.innerHTML=icon('spark')+'<span>离线模型</span>'+icon('chevron');button.onclick=ModelManager.open;box.appendChild(button);}update();};
  const previousEvent=window.nativeEvent;window.nativeEvent=async event=>{
   if(!['cutout','cutoutError'].includes(event.type))return previousEvent(event);
   const {source:src}=event.value||{},job=pending.get(src);if(!job)return;

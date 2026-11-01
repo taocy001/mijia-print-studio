@@ -19,6 +19,9 @@
   }catch(e){if(sheetKind==='models')$('modelRuntime').textContent=e.message||'模型状态读取失败';}
   finally{loading=false;}
  }
- const menu=$('menuBtn').onclick;$('menuBtn').onclick=()=>{menu();if(native.host!=='desktop'||native.capabilities?.models!==true)return;$('sheetBody').insertAdjacentHTML('beforeend',`<button class="menu-row" id="modelsMenu">${icon('spark')}<span>离线模型</span>${icon('chevron')}</button>`);$('modelsMenu').onclick=()=>{openSheet('models','离线模型','<p class="hint" id="modelRuntime">正在读取…</p><div id="modelList"></div><p class="hint" id="modelAccess"></p>');refresh();};};
+ function available(){return native.host==='desktop'&&native.capabilities?.models===true;}
+ function open(){if(!available())return;openSheet('models','离线模型','<p class="hint" id="modelRuntime">正在读取…</p><div id="modelList"></div><p class="hint" id="modelAccess"></p>');refresh();}
+ window.ModelManager={available,open};
+ const back=$('settingsBack').onclick;$('settingsBack').onclick=()=>{if(sheetKind==='models')openLayout();else back();};
  setInterval(refresh,1200);
 })();
