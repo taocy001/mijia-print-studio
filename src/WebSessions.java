@@ -61,7 +61,7 @@ final class WebSessions {
   if(session==null){session=restore(owner);if(session==null)return null;sessions.put(token,session);}
   return session;
  }
- synchronized String persistentCookie(String cookies){String token=cookie(cookies,"liuying");if(!token.matches("[A-Za-z0-9_-]{64}"))return null;String stored=pairings.getProperty(hash(token));long now=System.currentTimeMillis();if(authorizedOwner(stored,now)==null)return null;long seconds=(Long.parseLong(stored.split(" ")[1])-now)/1000;return "liuying="+token+"; Max-Age="+seconds+"; HttpOnly; SameSite=Strict; Path=/";}
+ synchronized String persistentCookie(String cookies){String token=cookie(cookies,"liuying");if(!token.matches("[A-Za-z0-9_-]{64}"))return null;String stored=pairings.getProperty(hash(token));long now=System.currentTimeMillis();if(authorizedOwner(stored,now)==null)return null;long seconds=(Long.parseLong(stored.split(" ")[1])-now)/1000;return "liuying="+token+"; Max-Age="+seconds+"; HttpOnly; SameSite=Lax; Path=/";}
  synchronized void clear(){sessions.clear();}
  synchronized void revokeAll()throws IOException{savePairings(new Properties());sessions.clear();String previous=code;do{code=newCode();}while(code.equals(previous));failures=0;blockedUntil=0;}
 }

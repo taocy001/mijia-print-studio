@@ -41,7 +41,7 @@ def declared_assets(root):
     assets = root/'assets'
     entry = EntryAssets()
     entry.feed((assets/'index.html').read_text())
-    names = {'index.html', 'sample.svg', 'provenance.json', *NOTICES, *entry.paths}
+    names = {'index.html', 'pair-restore.js', 'sample.svg', 'provenance.json', *NOTICES, *entry.paths}
     for item in json.loads((assets/'provenance.json').read_text()):
         path = local_path(item['path'])
         if path.startswith('assets/'):

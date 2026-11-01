@@ -51,7 +51,7 @@ class Studio:
         address,port=r.transport.get_extra_info('sockname')[:2];allowed={f'{address}:{port}'}
         if address=='127.0.0.1':allowed.add(f'localhost:{port}')
         if r.host not in allowed or r.method=='POST' and r.headers.get('Origin')!='http://'+r.host:raise web.HTTPForbidden()
-        if r.method=='GET' and r.path in ('/apple-touch-icon.png','/favicon.png'):
+        if r.method=='GET' and r.path in ('/apple-touch-icon.png','/favicon.png','/pair-restore.js'):
             return web.FileResponse(ROOT/'assets'/r.path[1:])
         if r.path=='/api/pair' and r.method=='POST':
             if (r.content_length or 0)>4096:raise web.HTTPRequestEntityTooLarge(max_size=4096,actual_size=r.content_length)
@@ -68,7 +68,7 @@ class Studio:
             self.remember(session);self.pairings.grant(token,owner_key)
             self.sessions={key:value for key,value in self.sessions.items() if self.pairings.find(key)}
             self.sessions[token]=session;self.failures=0
-            response=web.HTTPSeeOther('/');response.set_cookie('liuying',token,httponly=True,samesite='Strict',max_age=LIFETIME);response.set_cookie('liuying-owner',owner,httponly=True,samesite='Strict',max_age=LIFETIME);return response
+            response=web.HTTPSeeOther('/');response.set_cookie('liuying',token,httponly=True,samesite='Lax',max_age=LIFETIME);response.set_cookie('liuying-owner',owner,httponly=True,samesite='Lax',max_age=LIFETIME);return response
         session=self.session(r.cookies.get('liuying'))
         if not session:
             if r.path=='/' and r.method=='GET':return web.Response(text=self.pair_page('输入服务端显示的配对码'),content_type='text/html')
@@ -96,7 +96,11 @@ class Studio:
                 addresses=list(self.address_cache) if self.lan else []
                 if self.lan and not ipaddress.ip_address(address).is_loopback and address not in addresses:addresses.append(address)
                 return web.json_response(dict(running=True,host='desktop',code=self.code,canManagePairing=can_manage,name=self.name,airprintName=self.name,lan=self.lan,airprint=self.airprint,airprintReady=self.airprint and self.core.airprint_ready(),addresses=[f'http://{value}:{port}' for value in addresses],current='http://'+r.host))
-            if r.path=='/session.js':return web.Response(text='window.STUDIO_DRAFT_KEY='+json.dumps('liuying-draft-'+session['id'])+';',content_type='application/javascript')
+            if r.path=='/session.js':
+                response=web.Response(text='window.STUDIO_DRAFT_KEY='+json.dumps('liuying-draft-'+session['id'])+';',content_type='application/javascript')
+                token=r.cookies.get('liuying');grant=self.pairings.find(token)
+                response.set_cookie('liuying',token,httponly=True,samesite='Lax',max_age=max(0,int(grant['expires']-time.time())))
+                return response
             if r.path.startswith('/private/'):
                 if r.path not in session['files']:raise web.HTTPNotFound()
                 return web.FileResponse(self.data/r.path[9:])
@@ -152,7 +156,7 @@ class Studio:
         if r.path=='/api/cancel':return web.json_response(await self.core.cancel(session))
         if r.path=='/api/reconcile':return web.json_response(await self.core.reconcile(session))
         raise web.HTTPNotFound()
-    def pair_page(self,message):return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>留影工坊</title><link rel="icon" type="image/png" sizes="32x32" href="/favicon.png"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><style>:root{{color-scheme:light dark;font:16px system-ui}}body{{max-width:360px;margin:18vh auto;padding:24px}}input,button{{box-sizing:border-box;width:100%;padding:16px;margin:12px 0;border-radius:12px;font:inherit}}button{{background:#d5ba76;color:#222;border:0}}</style><h1>留影工坊</h1><p>{message}</p><form method="post" action="/api/pair"><input name="code" inputmode="numeric" pattern="[0-9]{{6}}" maxlength="6" required placeholder="6 位配对码"><button>连接</button></form></html>'''
+    def pair_page(self,message):return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>留影工坊</title><script src="/pair-restore.js" defer></script><link rel="icon" type="image/png" sizes="32x32" href="/favicon.png"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><style>:root{{color-scheme:light dark;font:16px system-ui}}body{{max-width:360px;margin:18vh auto;padding:24px}}input,button{{box-sizing:border-box;width:100%;padding:16px;margin:12px 0;border-radius:12px;font:inherit}}button{{background:#d5ba76;color:#222;border:0}}</style><h1>留影工坊</h1><p>{message}</p><form method="post" action="/api/pair"><input name="code" inputmode="numeric" pattern="[0-9]{{6}}" maxlength="6" required placeholder="6 位配对码"><button>连接</button></form></html>'''
 
 @web.middleware
 async def responses(request,handler):
