@@ -8,9 +8,23 @@
  async function refresh(fresh=false){if(refreshing){if(fresh){await refreshing;return refresh();}return refreshing;}refreshing=(async()=>{try{cached=await request('state');}catch(e){cached={...cached,device:{...cached.device,connected:false},busy:true,message:'共享服务已断开，请检查提供服务的设备'};}finally{refreshing=false;}})();return refreshing;}
  function action(name){return request(name,{}).then(refresh).catch(e=>emit('toast',e.message));}
  function pick(limit,texture=false){const input=document.createElement('input');input.type='file';input.accept='image/*';input.multiple=!texture&&limit>1;input.onchange=async()=>{if(input.files.length>limit){emit('toast','本次最多选择 '+limit+' 张照片');return;}emit('loading',true);const items=[];try{for(const file of input.files){if(file.size>25*1024*1024)throw Error('单张照片不能超过 25 MB');items.push(await request('upload',file,true));}}catch(e){emit('toast',e.message);}finally{emit(texture?'texture':'photos',items);emit('loading',false);}};input.click();}
+ const captureKey=()=> (window.STUDIO_DRAFT_KEY||'liuying-draft')+'-capture-result';let captureResult=null,capturePicking=false;
+ try{captureResult=JSON.parse(localStorage.getItem(captureKey())||'null');}catch{}
+ async function captureReady(){const result=captureResult;if(!result)return;try{if(result.photos.length)await emit('photos',result.photos);}finally{await emit('captureFinished',result.finished);}}
+ function captureAck(id){if(captureResult?.finished.id!==id)return JSON.stringify({ok:true});try{localStorage.removeItem(captureKey());}catch{return JSON.stringify({error:'拍摄记录确认失败，可稍后恢复'});}captureResult=null;return JSON.stringify({ok:true});}
+ function capture(limit){
+  if(limit<1)return JSON.stringify({error:'最多保留 6 张照片'});
+  if(capturePicking||captureResult)return JSON.stringify({error:'请先完成或恢复上次拍摄'});
+  const id=randomId(),input=document.createElement('input');input.type='file';input.accept='image/*';input.setAttribute('capture','environment');let finished=false;capturePicking=true;
+  const finish=async(value,photos=[])=>{if(finished)return;finished=true;capturePicking=false;captureResult={photos,finished:{id,...value}};try{localStorage.setItem(captureKey(),JSON.stringify(captureResult));}catch{}await captureReady();};
+  input.oncancel=()=>finish({cancelled:true});input.onchange=async()=>{const file=input.files[0];if(!file){await finish({cancelled:true});return;}
+   try{if(file.size>25*1024*1024)throw Error('单张照片不能超过 25 MB');const photo=await request('upload',file,true);await finish({},[{...photo,captureId:id}]);}
+   catch(e){await finish({error:e.message||'无法读取拍摄照片'});}
+  };try{input.click();}catch{capturePicking=false;return JSON.stringify({error:'无法打开相机或图片选择器'});}return JSON.stringify({ok:true,id});
+ }
  window.Studio={
   state:()=>JSON.stringify(cached),landscape:()=>innerWidth>innerHeight&&innerWidth<1000,
-  pick:n=>pick(n),pickTexture:()=>pick(1,true),connect:()=>action('connect'),release:()=>action('release'),airprintLayout:splice=>request('airprint-layout',{splice}).then(refresh).catch(e=>emit('toast',e.message)),
+  capture,captureReady,captureAck,pick:n=>pick(n),pickTexture:()=>pick(1,true),connect:()=>action('connect'),release:()=>action('release'),airprintLayout:splice=>request('airprint-layout',{splice}).then(refresh).catch(e=>emit('toast',e.message)),
   bluetoothSettings:()=>emit('toast','请在提供服务的设备上打开蓝牙设置'),
   cutout:source=>{setTimeout(()=>request('cutout',{source}).then(v=>emit('cutout',{source,images:v.images})).catch(e=>emit('cutoutError',{source,message:e.message})),0);return '{"ok":true}';},
   printBatch:async payload=>{try{const pages=JSON.parse(payload);const key=pendingPrint.requestId||(pendingPrint.requestId=randomId());const result=await request('print',{requestId:key,pages});await refresh();return JSON.stringify(result);}catch(e){return JSON.stringify({error:e.message});}},
