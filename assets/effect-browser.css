@@ -1,0 +1,12 @@
+#effectTools{display:flex;align-items:center;gap:2px;max-width:calc(100vw - 32px)}
+#effectTools[hidden]{display:none}
+#effectTools button{flex:0 0 40px;width:40px;min-width:40px}
+#effectPrev svg{transform:rotate(180deg)}
+#effectName{color:#fff;width:108px;max-width:28vw;text-align:center;font-size:13px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;user-select:none;touch-action:none}
+#effectTools button:disabled{opacity:.32;cursor:default}
+body.effect-browsing #preview{touch-action:pan-y!important;cursor:ew-resize}
+body.effect-browsing .crop-frame-edge,body.effect-browsing #layerSelection,body.effect-browsing #layerResize{pointer-events:none!important;visibility:hidden}
+body.effect-browsing #photoTools,body.effect-browsing #layerTools{display:none!important}
+body.effect-browsing .tool-tabs button[aria-pressed=true]{color:var(--gold,#dcc17b)}
+#preview:focus-visible{outline:2px solid var(--gold,#dcc17b);outline-offset:3px}
+.browser-client body.desktop-editor.effect-browsing #sheet.desktop-inspector>header{display:flex;padding:0 2px 10px;margin-bottom:8px}
