@@ -245,7 +245,7 @@ window.OriginalTemplates=(()=>{
  function variant(base,w,h){return {...base,...shape(w,h,base.style)};}
  return {catalog,paint,variant};
 })();
-TEMPLATE_CATALOG.unshift(...OriginalTemplates.catalog);
+TEMPLATE_CATALOG.unshift(...OriginalTemplates.catalog.filter(t=>t.style.startsWith('kids-')),...OriginalTemplates.catalog.filter(t=>!t.style.startsWith('kids-')));
 
 {
  const valid=new Set(TEMPLATE_CATALOG.map(t=>t.id));let removed=false;
