@@ -128,6 +128,15 @@ public final class MainActivity extends Activity {
             try{return ProjectFiles.importImage(MainActivity.this,base64).toString();}
             catch(Exception|OutOfMemoryError error){return "{\"error\":\"无法导入作品照片，请检查 JPEG 格式、大小和尺寸\"}";}
         }
+        @JavascriptInterface public String historyStorage(String payload){return historyFiles(payload,false);}
+        @JavascriptInterface public String clearHistoryFiles(String payload){return historyFiles(payload,true);}
+        private String historyFiles(String payload,boolean clear){
+            try{if(payload==null||payload.length()>4096)throw new IllegalArgumentException();JSONObject request=new JSONObject(payload);
+                if(clear&&!Boolean.TRUE.equals(request.opt("confirmed")))return "{\"error\":\"请确认清理历史打印文件\"}";
+                JSONArray keep=request.optJSONArray("keepFiles");if(keep==null||keep.length()>32)throw new IllegalArgumentException();
+                return (clear?HistoryStorage.clear(MainActivity.this,"local",keep):HistoryStorage.summary(MainActivity.this,"local",keep)).toString();
+            }catch(Exception e){return "{\"error\":\"暂时无法清理，请确认没有未完成任务且历史记录完整\"}";}
+        }
         @JavascriptInterface public String sharingState(){return SharingService.sharingState().toString();}
         @JavascriptInterface public void startSharing(){main.post(()->{sharingAirPrint=false;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
         @JavascriptInterface public void startAirPrint(){main.post(()->{sharingAirPrint=true;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
@@ -136,7 +145,7 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void resumeSharing(){SharingService.resumeQueue();}
         @JavascriptInterface public boolean landscape(){return getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE;}
 
-        @JavascriptInterface public String state(){try{JSONObject state=Store.state(MainActivity.this),current=state.getJSONObject("job"),waiting=PrintJobs.state(MainActivity.this,"local").getJSONObject("job");if((!current.has("token")||Store.terminal(current))&&"queued".equals(waiting.optString("phase")))state.put("job",waiting).put("unresolved",true);JSONArray history=state.optJSONArray("history");if(history!=null)for(int i=0;i<history.length();i++)Reprints.decorate(MainActivity.this,"local",history.getJSONObject(i));return state.put("permission",granted()).toString();}catch(Exception e){return "{}";}}
+        @JavascriptInterface public String state(){try{JSONObject state=Store.state(MainActivity.this),current=state.getJSONObject("job"),waiting=PrintJobs.state(MainActivity.this,"local").getJSONObject("job");if((!current.has("token")||Store.terminal(current))&&"queued".equals(waiting.optString("phase")))state.put("job",waiting).put("unresolved",true);JSONArray history=state.optJSONArray("history");if(history!=null)for(int i=0;i<history.length();i++)Reprints.decorate(MainActivity.this,"local",history.getJSONObject(i));return state.put("permission",granted()).put("capabilities",new JSONObject().put("historyStorage",true)).toString();}catch(Exception e){return "{}";}}
         @JavascriptInterface public void release(){try{PrinterStatus.release(MainActivity.this);}catch(Exception e){event("toast",e.getMessage());}}
         @JavascriptInterface public void airprintLayout(boolean splice){try{PrinterStatus.layout(splice);}catch(Exception e){event("toast",e.getMessage());}}
         @JavascriptInterface public void connect(){main.post(()->check());}

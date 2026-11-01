@@ -15,11 +15,11 @@ final class Reprints {
  static JSONArray pages(Context c,String owner,String token)throws Exception{
   JSONArray history=Store.read(c,"history.json").optJSONArray("items");JSONObject source=null;
   if(history!=null)for(int i=0;i<history.length();i++){JSONObject j=history.getJSONObject(i);if(token.equals(j.optString("token"))&&owner.equals(j.optString("owner")))source=j;}
-  if(source==null||!source.optString("phase").equals("done"))throw new IOException("只能重印本人的已完成作品");
+  if(source==null||(!source.optString("phase").equals("done")||source.optBoolean("filesCleared")))throw new IOException("只能重印本人的已完成作品");
   int count=source.optInt("batchCount",1);if(count<1||count>6)throw new IOException("历史批次无效");
   JSONObject[] ordered=new JSONObject[count];String batch=source.optString("batchId");
   for(int i=0;i<history.length();i++){JSONObject j=history.getJSONObject(i);if(!owner.equals(j.optString("owner"))||!(batch.isEmpty()?token.equals(j.optString("token")):batch.equals(j.optString("batchId"))))continue;
-   int index=j.optInt("batchIndex",1)-1;if(index<0||index>=count||ordered[index]!=null||j.optInt("batchCount",1)!=count||!j.optString("phase").equals("done")||j.optBoolean("batchStopped"))throw new IOException("该批次尚未全部完成");ordered[index]=j;
+   int index=j.optInt("batchIndex",1)-1;if(index<0||index>=count||ordered[index]!=null||j.optInt("batchCount",1)!=count||!j.optString("phase").equals("done")||j.optBoolean("batchStopped")||j.optBoolean("filesCleared"))throw new IOException("该批次尚未全部完成");ordered[index]=j;
   }
   JSONArray pages=new JSONArray();for(JSONObject j:ordered){if(j==null)throw new IOException("历史批次不完整，无法原样重印");file(c,j.optString("file"),".jpg");if(!j.optString("ocFile").isEmpty())file(c,j.optString("ocFile"),".oc");pages.put(j);}return pages;
  }
