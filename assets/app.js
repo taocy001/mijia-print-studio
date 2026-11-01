@@ -16,7 +16,7 @@ const MODES=[['photo','照片'],['template','模板'],['collage','拼图'],['pol
 const FILTERS=Tone.names.map(([id,name])=>[id,name,'none']);
 const PAPER={5009:['3 寸方形背胶纸','方形照片 · 背胶相纸','3 寸背胶'],5012:['6 寸相纸','102 × 152 mm','6 寸'],5014:['4 寸拼接相纸','整版上下两幅','4 寸拼接']};
 const defaults={mode:'photo',media:5012,orientation:'auto',fit:'cover',border:0,gap:16,filter:'none',caption:'',month:new Date().toISOString().slice(0,7),label:'名字，留在喜欢的东西上',subtitle:'THIS BELONGS TO ME',idSize:'35x45',photos:[],active:0};
-let state={...defaults},native={},images=new Map(),peek=false,sheetKind='',toastTimer,renderQueued=false,lastJobPhase='',pendingPrint=null;
+let state={...defaults},native={},images=new Map(),peek=false,sheetKind='',toastTimer,renderQueued=false,pendingPrint=null;
 try{const old=JSON.parse(localStorage.getItem(window.STUDIO_DRAFT_KEY||'liuying-draft')||'null');if(old)state={...defaults,...old};}catch(e){}
 if(!MODES.some(m=>m[0]===state.mode))state.mode='photo';if(!PAPER[state.media])state.media=5012;if(state.sixLayout===undefined)state.sixLayout=state.media===5014?5014:5012;
 state.photos=(state.photos||[]).filter(p=>p.src==='/sample.svg'||/^\/private\/(photos|prints)\/[a-zA-Z0-9-]+\.jpg$/.test(p.src)).slice(0,6);
@@ -163,6 +163,19 @@ function render(){
  if(window.CropEditor)CropEditor.render();if(window.LayerEditor)LayerEditor.refresh();
  updateStatus();
 }
+const jobNotifications=new Map();
+function notifyJobCompletion(job={}){
+ if(!job.token||!job.phase)return;
+ const previous=jobNotifications.get(job.token);
+ const done=job.phase==='done',observed=previous?.done||done;
+ jobNotifications.delete(job.token);
+ jobNotifications.set(job.token,{phase:job.phase,done:observed});
+ if(jobNotifications.size>128)jobNotifications.delete(jobNotifications.keys().next().value);
+ const progressing=['queued','prepared','creating','uploading','printing','held','uncertain','blocked'];
+ const finalPage=native.simulation||!(job.batchCount>1)||job.batchIndex===job.batchCount;
+ if(done&&previous&&!previous.done&&progressing.includes(previous.phase)&&finalPage&&!job.batchStopped)
+  toast(native.simulation?'模拟打印已完成，不会实际出纸。':'打印完成，去取你的照片吧。');
+}
 function updateStatus(){
  const tray=detectedPaper();
  if(!tray){$('paperBtn').innerHTML='识别相纸'+icon('chevron');$('paperBtn').setAttribute('aria-label','识别相纸');$('paperInfo').textContent='相纸待识别';$('paperTag').textContent='待识别';}
@@ -173,10 +186,11 @@ function updateStatus(){
  $('dockTitle').textContent=ready()?'一张，刚刚好。':'准备好你的第一张';
  $('dockMeta').textContent=`${PAPER[state.media][0]} · ${LabelBatch.enabled()?LabelBatch.pages()+' 张姓名贴':state.mode==='collage'?Math.min(6,state.photos.length)+' 张拼成 1 张':state.media===5014?'上下两幅 · 1 张':'单张打印'}`;
  const d=native.device||{},fresh=d.connected&&(Date.now()-d.checkedAt<60000);
- $('deviceText').textContent=native.busy?native.message:fresh?`蓝牙可用${d.alert&&d.alert!=='::0'?' · 设备有告警':d.state==='30'?' · 待机':' · 按需连接'}`:'点击检测打印机';
- const j=displayJob();window.PrintProcess?.update(j);if(sheetKind==='job'&&$('liveJobMessage'))$('liveJobMessage').textContent=j.message||'暂无任务';$('jobBanner').hidden=!j.token||(!native.busy&&!native.unresolved&&!['rejected','aborted','blocked','uncertain','held'].includes(j.phase));
+ $('deviceText').textContent=native.busy?(native.unresolved?native.message:'正在读取打印机状态'):fresh?`蓝牙可用${d.alert&&d.alert!=='::0'?' · 设备有告警':d.state==='30'?' · 待机':' · 按需连接'}`:'点击检测打印机';
+ const j=displayJob();window.PrintProcess?.update(j);if(sheetKind==='job'&&$('liveJobMessage'))$('liveJobMessage').textContent=j.message||'暂无任务';$('jobBanner').hidden=!j.token||['done','cancelled'].includes(j.phase);
  if(j.token){$('jobLabel').textContent=j.message||native.message;const indeterminate=j.progress<0&&!['done','cancelled','aborted','rejected','held','uncertain','blocked'].includes(j.phase);$('jobProgress').classList.toggle('indeterminate',indeterminate);$('jobProgress').style.width=indeterminate?'35%':Math.max(0,j.progress||0)+'%';$('jobAction').textContent=native.unresolved?'检查任务':'详情';}
- if(j.phase==='done'&&lastJobPhase&&lastJobPhase!=='done')toast('打印完成，去取你的照片吧。');lastJobPhase=j.phase;showPrintFailure();
+ for(const item of native.history||[])if(item.token!==native.job?.token&&jobNotifications.has(item.token)&&['done','cancelled','aborted','rejected'].includes(item.phase))notifyJobCompletion(item);
+ notifyJobCompletion(native.job);showPrintFailure();
 }
 function detectedPaper(){const d=native.device||{};return d.connected&&Date.now()-d.checkedAt<150000&&[5009,5012].includes(+d.media)?+d.media:0;}
 function syncPaper(){
@@ -231,7 +245,7 @@ function deviceSignature(){const d=native.device||{};return JSON.stringify([d.co
 function refreshDeviceSheet(){if(sheetKind==='device'&&deviceSheetSignature!==deviceSignature())openDevice();}
 async function deviceAction(button,method,...args){button.disabled=true;try{await bridge(method,...args);}catch(e){toast(e.message||'操作未完成');}poll();if(sheetKind==='device')openDevice();else if(sheetKind==='paper')openPaper();}
 function openDevice(){deviceSheetSignature=deviceSignature();const d=native.device||{};openSheet('device','你的打印机',`<div class="info-row"><span>设备</span><strong>米家桌面照片机 2</strong></div><div class="info-row"><span>连接</span><strong>${native.busy?'正在处理，请稍候':d.released?'本机访问已暂停':d.connected?'蓝牙可用 · 按需连接':'尚未读取状态'}</strong></div><div class="info-row"><span>检测到的相纸</span><strong>${detectedPaper()?PAPER[detectedPaper()][0]:'待识别'}</strong></div><div class="info-row"><span>色带余量</span><strong>${d.ribbon>=0?d.ribbon+' 张':'等待设备提供有效读数'}</strong></div>${d.alert&&d.alert!=='::0'?`<p class="hint">设备告警：${esc(d.alert)}</p>`:''}<button class="full-button" id="connectNow" ${native.busy?'disabled':''}>${icon('printer')} 检测打印机</button><button class="full-button secondary-button" id="changePaper">相纸与拼接</button>${!native.device?.released?'<button class="full-button secondary-button" id="releaseBluetooth">暂停本机蓝牙访问</button>':''}${detectedPaper()===5012?'<button class="full-button secondary-button" id="airprintLayout">AirPrint：'+(native.airprintSplice?'两张四寸拼接':'整张六寸')+'</button>':''}<button class="full-button secondary-button" id="systemBluetooth">打开系统蓝牙设置</button><p class="hint">请保持打印机开机，并在系统蓝牙中完成配对。</p>`);}
-function displayJob(){const j=native.job||{},f=native.failure||{};return native.busy||native.unresolved||!f.token||j.token===f.token||(j.createdAt||0)>=(f.createdAt||0)?j:f;}
+function displayJob(){const j=native.job||{},f=native.failure||{};return native.unresolved||!f.token||j.token===f.token||(j.createdAt||0)>=(f.createdAt||0)?j:f;}
 const failureSeen=new Set();
 let failureDialog=null;
 function showPrintFailure(extra){
