@@ -23,7 +23,8 @@ window.LayerEditor = (() => {
   function metrics(o,w,h){
     const font=(FONTS[o.font]||FONTS.sans)[1];let size=Math.max(2,Math.min(32,Number(o.sizePct)||9))*w/100;
     let lines=[],width,height,pad;
-    if(o.kind==='emoji'){width=size;height=size;pad=0;}
+    if(o.kind==='qr'){size=Math.max(QrSticker.minimum(o.text),Math.min(80,Number(o.sizePct)||28)*w/100);width=size;height=size;pad=0;}
+    else if(o.kind==='emoji'){width=size;height=size;pad=0;}
     else{
       measureContext.font=`${size}px ${font}`;
       for(const paragraph of String(o.text||'').split('\n')){
@@ -31,7 +32,7 @@ window.LayerEditor = (() => {
       }
       pad=size*.2;width=Math.max(size*.65,...lines.map(line=>measureContext.measureText(line).width))+pad*2;height=lines.length*size*1.28+pad*2;
     }
-    const angle=Math.max(-180,Math.min(180,Number(o.angle)||0))*Math.PI/180;
+    const angle=o.kind==='qr'?0:Math.max(-180,Math.min(180,Number(o.angle)||0))*Math.PI/180;
     const c=Math.abs(Math.cos(angle)),s=Math.abs(Math.sin(angle));
     const fit=Math.min(1,(w-24)/(width*c+height*s),(h-24)/(width*s+height*c));
     width*=fit;height*=fit;size*=fit;pad*=fit;
@@ -42,7 +43,7 @@ window.LayerEditor = (() => {
   }
   function paint(ctx,w,h,objects=list(),mode='photo'){
     if(mode==='mask'||mode==='editor'){
-      const hidden=objects.filter(o=>o.hidden);
+      const hidden=objects.filter(o=>o.hidden&&o.kind!=='qr');
       if(mode==='editor')paint(ctx,w,h,objects,'photo');
       if(!hidden.length)return;
       const mask=document.createElement('canvas');mask.width=w;mask.height=h;
@@ -55,9 +56,10 @@ window.LayerEditor = (() => {
     }
     if(peek)return;
     for(const o of objects){
-      if(o.hidden)continue;
+      if(o.hidden&&o.kind!=='qr')continue;
       const m=metrics(o,w,h);ctx.save();ctx.translate(m.x,m.y);ctx.rotate(m.angle);
-      if(o.kind==='emoji'){
+      if(o.kind==='qr'){QrSticker.paint(ctx,o,m.size);}
+      else if(o.kind==='emoji'){
         const im=emojiImages.get(o.text.replaceAll('\ufe0f',''));if(im)ctx.drawImage(im,-m.size/2,-m.size/2,m.size,m.size);else{ctx.font=`${m.size}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(o.text,0,0);}
       }else{
         if(o.bubble)rounded(ctx,-m.width/2,-m.height/2,m.width,m.height,m.size*.22,o.bubble);
@@ -76,11 +78,11 @@ window.LayerEditor = (() => {
     const now=scopeKey();if(scope!==now){if(document.body.classList.contains('layer-editing'))closeSheet();selectedId=null;scope=now;pointers.clear();gestureTarget=null;resizeState=null;previous=null;}
     const o=selected(),box=$('layerSelection'),handle=$('layerResize');document.body.classList.toggle('object-selected',!!o);
     if(o&&editingId===o.id&&document.body.classList.contains('layer-editing')){for(const key of ['sizePct','angle']){const input=$('sheetBody').querySelector('[data-layer-range='+key+']');if(input){input.value=o[key];$('out-'+key).value=Math.round(o[key]);}}}
-    $('layerTools').hidden=!o;$('photoTools').hidden=!!o;document.querySelector('.photo-tools').setAttribute('aria-label',o?'文字与表情快捷工具':'照片快捷工具');$('layerName').textContent=o?((o.hidden?'覆膜 · ':'')+(o.kind==='emoji'?'已选表情':'已选文字')):'';
+    $('layerTools').hidden=!o;$('photoTools').hidden=!!o;document.querySelector('.photo-tools').setAttribute('aria-label',o?'文字与表情快捷工具':'照片快捷工具');$('layerName').textContent=o?((o.hidden?'覆膜 · ':'')+(o.kind==='qr'?'已选二维码':o.kind==='emoji'?'已选表情':'已选文字')):'';
     box.hidden=handle.hidden=!o||peek||!readyPhoto();
     if(!o||peek||!readyPhoto())return;
     const [w,h]=layerSize(),m=metrics(o,w,h),rect=$('preview').getBoundingClientRect(),view=window.CropEditor?.geometry()||{tx:0,ty:0},origin=space(),scale=rect.width/$('preview').width;
-    Object.assign(box.style,{left:(m.x+origin.x+view.tx)*scale+'px',top:(m.y+origin.y+view.ty)*scale+'px',width:Math.max(44,m.width*scale)+'px',height:Math.max(44,m.height*scale)+'px',transform:`translate(-50%,-50%) rotate(${o.angle||0}deg)`});
+    Object.assign(box.style,{left:(m.x+origin.x+view.tx)*scale+'px',top:(m.y+origin.y+view.ty)*scale+'px',width:Math.max(44,m.width*scale)+'px',height:Math.max(44,m.height*scale)+'px',transform:`translate(-50%,-50%) rotate(${o.kind==='qr'?0:o.angle||0}deg)`});
     // Keep the resize target outside the minimum 44px movement target, including at edges.
     const cx=(m.x+origin.x+view.tx)*scale,cy=(m.y+origin.y+view.ty)*scale;
     const angle=m.angle,c=Math.abs(Math.cos(angle)),sn=Math.abs(Math.sin(angle));
@@ -98,6 +100,7 @@ window.LayerEditor = (() => {
   function reveal(){if(document.body.classList.contains('landscape')||!selected())return;const r=$('layerSelection').getBoundingClientRect(),top=(document.querySelector('.topbar')?.getBoundingClientRect().height||0)+12,bottom=$('sheet').getBoundingClientRect().top-20;if(r.bottom>bottom)window.scrollBy({top:r.bottom-bottom,behavior:'smooth'});else if(r.top<top)window.scrollBy({top:r.top-top,behavior:'smooth'});}
   function range(key,label,value,min,max){return `<label class="layer-range">${label}<output id="out-${key}">${value}</output><input data-layer-range="${key}" type="range" min="${min}" max="${max}" step="1" value="${value}"></label>`;}
   function openEditor(o){
+    if(o?.kind==='qr')return QrSticker.edit(o);
     if(o)select(o.id);const isText=!o||o.kind==='text';
     drawer(isText?(o?'编辑文字':'添加文字'):'编辑表情',`${isText?`<textarea id="layerText" maxlength="160" placeholder="写下想留在照片上的话" aria-label="照片上的文字">${esc(o?.text||'')}</textarea><div class="layer-options" id="fontOptions">${Object.entries(FONTS).map(([k,v])=>`<button data-font="${k}" style="font-family:${v[1]}" class="${(o?.font||'sans')===k?'selected':''}">${v[0]}</button>`).join('')}</div><div class="color-options">${COLORS.map(c=>`<button data-color="${c}" aria-label="文字颜色 ${c}" aria-pressed="${(o?.color||'#ffffff')===c}" style="--swatch:${c}"></button>`).join('')}</div><div class="layer-options"><button id="layerStroke" aria-pressed="${!!(o?.stroke??true)}">描边</button><button id="layerBubble" aria-pressed="${!!o?.bubble}">底色</button><button id="layerAlign">对齐：${o?.align==='left'?'左':o?.align==='right'?'右':'居中'}</button></div>`:`<button class="full-button secondary-button" id="replaceEmoji">更换表情 ${esc(o.text)}</button>`}${list().length>1?'<button class="layer-picker" id="pickCoveredLayer">选择被遮住的文字或表情</button>':''}<label class="coat-switch"><span>隐藏到覆膜<small>仅侧光下可见，不印入照片颜色</small></span><input id="layerHidden" type="checkbox" role="switch" ${o?.hidden?'checked':''}></label>${range('sizePct','大小',o?.sizePct||9,2,32)}${range('angle','旋转',o?.angle||0,-180,180)}<p class="hint">在照片上拖动位置 · 拖动圆形手柄缩放 · 双指缩放、旋转</p>`);
     const editorScope=scopeKey();let draftId=o?.id,pending={font:'sans',color:'#ffffff',stroke:'#203d33',bubble:'',align:'center',sizePct:9,angle:0};editingId=o?.id||null;
@@ -115,7 +118,7 @@ window.LayerEditor = (() => {
   }
   function openEmoji(replace){drawer('选择表情',`<label class="coat-switch"><span>隐藏到覆膜<small>表情只出现在覆膜层</small></span><input id="emojiHidden" type="checkbox" role="switch" ${replace?.hidden?'checked':''}></label><div class="emoji-tabs">${Object.keys(EMOJI).map((k,i)=>`<button data-emoji-tab="${i}">${k}</button>`).join('')}</div><p class="hint">上下滑动浏览全部表情 · 点一下添加</p>${Object.entries(EMOJI).map(([category,items],i)=>`<section class="emoji-category" id="emoji-category-${i}"><h3>${category}</h3><div class="emoji-grid">${items.map(([v,label])=>`<button data-emoji="${v}" aria-label="${label}"><img src="/emoji/${emojiCodes.get(v)||Object.values(SHARED_EMOJI).flat().find(x=>x.text===v)?.code}.svg" alt=""></button>`).join('')}</div></section>`).join('')}`);$('sheet').classList.add('emoji-sheet');$('sheetBody').querySelectorAll('[data-emoji-tab]').forEach(b=>b.onclick=()=>{const target=$('emoji-category-'+b.dataset.emojiTab),body=$('sheetBody');body.scrollTo({top:body.scrollTop+target.getBoundingClientRect().top-body.getBoundingClientRect().top-52,behavior:'smooth'});});$('sheetBody').querySelectorAll('[data-emoji]').forEach(b=>b.onclick=()=>{if(replace){replace.text=b.dataset.emoji;replace.hidden=$('emojiHidden').checked;select(replace.id);}else create({kind:'emoji',text:b.dataset.emoji,sizePct:15,stroke:'',hidden:$('emojiHidden').checked});closeSheet();schedule();});}
 
-  function openHome(kind){if(kind==='emoji')return openEmoji();if(kind==='text')return openEditor(selected()?.kind==='text'?selected():null);drawer('文字与表情',`<div class="layer-options"><button id="newLayerText">添加文字</button><button id="newLayerEmoji">添加表情</button></div><div class="layer-list">${[...list()].reverse().map(o=>`<button data-layer-id="${o.id}">${o.kind==='emoji'?'表情':'文字'} · ${esc(o.text||'空文字')}</button>`).join('')||'<p class="hint">还没有添加文字或表情</p>'}</div><button class="full-button secondary-button" id="legacyCaption">${state.mode==='label'?'编辑姓名与副标题':'编辑底部题字'}</button>`);$('newLayerText').onclick=()=>openEditor();$('newLayerEmoji').onclick=()=>openEmoji();$('legacyCaption').onclick=openLegacyText;$('sheetBody').querySelectorAll('[data-layer-id]').forEach(b=>b.onclick=()=>openEditor(list().find(o=>o.id===b.dataset.layerId)));}
+  function openHome(kind){if(kind==='emoji')return openEmoji();if(kind==='text')return openEditor(selected()?.kind==='text'?selected():null);drawer('文字与表情',`<div class="layer-options"><button id="newLayerText">添加文字</button><button id="newLayerEmoji">添加表情</button></div><div class="layer-list">${[...list()].reverse().map(o=>`<button data-layer-id="${o.id}">${o.kind==='qr'?'二维码':o.kind==='emoji'?'表情':'文字'} · ${esc(o.text||'空文字')}</button>`).join('')||'<p class="hint">还没有添加文字或表情</p>'}</div><button class="full-button secondary-button" id="legacyCaption">${state.mode==='label'?'编辑姓名与副标题':'编辑底部题字'}</button>`);$('newLayerText').onclick=()=>openEditor();$('newLayerEmoji').onclick=()=>openEmoji();$('legacyCaption').onclick=openLegacyText;$('sheetBody').querySelectorAll('[data-layer-id]').forEach(b=>b.onclick=()=>openEditor(list().find(o=>o.id===b.dataset.layerId)));}
   function remove(){const o=selected();if(!o)return;const collection=list(),index=collection.indexOf(o);collection.splice(index,1);select(null);closeSheet();schedule();document.getElementById('layerUndo')?.remove();clearTimeout(undoTimer);const bar=document.createElement('div');bar.id='layerUndo';bar.className='layer-undo';bar.innerHTML='已删除 <button>撤销</button>';document.body.append(bar);bar.querySelector('button').onclick=()=>{collection.splice(index,0,o);bar.remove();schedule();};undoTimer=setTimeout(()=>bar.remove(),6000);}
   const canvas=$('preview');
   function point(e){const p=CropEditor.toPaper(e),s=space();return{x:p.x-s.x,y:p.y-s.y};}
@@ -124,7 +127,7 @@ window.LayerEditor = (() => {
   selection.onpointerdown=e=>{if(peek)return;e.preventDefault();const p=point(e);if(!pointers.size){const o=selected()||hit(p.x,p.y),had=selected();gestureTarget=o||(!had?'photo':null);select(o?.id||null);moved=false;}pointers.set(e.pointerId,p);selection.setPointerCapture(e.pointerId);previous=geometry();};
   selection.onpointermove=e=>{if(!pointers.has(e.pointerId))return;e.preventDefault();pointers.set(e.pointerId,point(e));const g=geometry(),old=previous;previous=g;if(!old||!gestureTarget)return;const [w,h]=layerSize(),dx=g.x-old.x,dy=g.y-old.y;if(Math.abs(dx)+Math.abs(dy)>2||g.n===2)moved=true;
     if(gestureTarget==='photo'){const p=active();if(!p)return;p.x=Math.max(-1,Math.min(1,(p.x||0)+dx/w*2));p.y=Math.max(-1,Math.min(1,(p.y||0)+dy/h*2));if(g.n===2&&old.n===2&&old.d)p.zoom=Math.max(1,Math.min(4,(p.zoom||1)*g.d/old.d));}
-    else {const o=gestureTarget,m=metrics(o,w,h);o.fx=(m.x+dx)/w;o.fy=(m.y+dy)/h;if(g.n===2&&old.n===2&&old.d){o.sizePct=Math.max(2,Math.min(32,o.sizePct*g.d/old.d));o.angle=((o.angle+(g.a-old.a)*180/Math.PI+540)%360)-180;}constrain(o);}schedule();};
+    else {const o=gestureTarget,m=metrics(o,w,h);o.fx=(m.x+dx)/w;o.fy=(m.y+dy)/h;if(g.n===2&&old.n===2&&old.d){o.sizePct=Math.max(2,Math.min(o.kind==='qr'?80:32,o.sizePct*g.d/old.d));o.angle=o.kind==='qr'?0:((o.angle+(g.a-old.a)*180/Math.PI+540)%360)-180;}constrain(o);}schedule();};
   function end(e){if(!pointers.has(e.pointerId))return;pointers.delete(e.pointerId);previous=geometry();if(!pointers.size){if(e.type==='pointerup'&&!moved&&selected()){const now=Date.now();if(lastTap?.id===selectedId&&now-lastTap.time<350){openEditor(selected());lastTap=null;}else lastTap={id:selectedId,time:now};}gestureTarget=null;}}
   selection.onpointerup=end;selection.onpointercancel=end;selection.onlostpointercapture=end;
   let tap=null;
@@ -132,7 +135,7 @@ window.LayerEditor = (() => {
   canvas.onpointermove=e=>{if(tap&&Math.hypot(e.clientX-tap.x,e.clientY-tap.y)>8)tap=null;};
   canvas.onpointercancel=()=>tap=null;
   canvas.onpointerup=e=>{if(!tap||tap.id!==e.pointerId)return;tap=null;const p=point(e),o=hit(p.x,p.y);select(o?.id||null);};
-  const handle=$('layerResize');handle.onpointerdown=e=>{e.preventDefault();e.stopPropagation();const o=selected();if(!o)return;const [w,h]=layerSize(),m=metrics(o,w,h),p=point(e);resizeState={o,d:Math.max(1,Math.hypot(p.x-m.x,p.y-m.y)),size:o.sizePct};handle.setPointerCapture(e.pointerId);};handle.onpointermove=e=>{if(!resizeState)return;e.preventDefault();const {o,d,size}=resizeState,[w,h]=layerSize(),m=metrics(o,w,h),p=point(e);o.sizePct=Math.max(2,Math.min(32,size*Math.hypot(p.x-m.x,p.y-m.y)/d));constrain(o);schedule();};for(const event of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(event,()=>resizeState=null);
+  const handle=$('layerResize');handle.onpointerdown=e=>{e.preventDefault();e.stopPropagation();const o=selected();if(!o)return;const [w,h]=layerSize(),m=metrics(o,w,h),p=point(e);resizeState={o,d:Math.max(1,Math.hypot(p.x-m.x,p.y-m.y)),size:o.sizePct};handle.setPointerCapture(e.pointerId);};handle.onpointermove=e=>{if(!resizeState)return;e.preventDefault();const {o,d,size}=resizeState,[w,h]=layerSize(),m=metrics(o,w,h),p=point(e);o.sizePct=Math.max(2,Math.min(o.kind==='qr'?80:32,size*Math.hypot(p.x-m.x,p.y-m.y)/d));constrain(o);schedule();};for(const event of ['pointerup','pointercancel','lostpointercapture'])handle.addEventListener(event,()=>resizeState=null);
   document.addEventListener('keydown',e=>{
     if(!['Delete','Backspace'].includes(e.key)||e.isComposing||e.ctrlKey||e.metaKey||e.altKey)return;
     if(e.target.closest?.('input,textarea,select,[contenteditable]')||(!$('sheet').hidden&&!$('sheet').classList.contains('desktop-inspector'))||!selected())return;

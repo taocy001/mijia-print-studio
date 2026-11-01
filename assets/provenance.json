@@ -323,5 +323,10 @@
     "path": "assets/fonts/MaShanZheng-OFL.txt",
     "source": "https://raw.githubusercontent.com/google/fonts/main/ofl/mashanzheng/OFL.txt",
     "sha256": "d7bdb1cee215b689e23c2f95672a6084c790542170648267a55114103d756a08"
+  },
+  {
+    "path": "assets/qrcodegen.js",
+    "source": "https://github.com/nayuki/QR-Code-generator/releases/download/v1.8.0/qrcodegen-v1.8.0-es6.js",
+    "sha256": "6a1116192ed1dd67fa1bf31e77f5817103d71c23bbac24c382e698b7668bdd01"
   }
 ]

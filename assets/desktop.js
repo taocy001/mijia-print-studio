@@ -3,7 +3,7 @@
  if(!window.BrowserTransport)return;
  const media=matchMedia('(min-width:1000px) and (pointer:fine)'),sheet=$('sheet');
  const open=openSheet,close=closeSheet;let restore=0,last='layout';
- const settings=new Set(['menu','device','paper','sharing','coat','workType','history','historyDetail','job','models']);
+ const settings=new Set(['menu','device','paper','sharing','coat','workType','history','historyDetail','job','models','qr']);
  const back=$('settingsBack');
  const panels={layout:()=>openLayout(),filters:()=>openFilters(),templates:()=>TemplateStudio.open()};
  function refresh(){cancelAnimationFrame(restore);restore=requestAnimationFrame(()=>{if(media.matches&&sheet.hidden)panels[last]?.();});}
