@@ -17,3 +17,8 @@ body.layer-editing .dock{display:none}body.layer-editing .app{padding-bottom:60v
 #paperStage:after{display:none}.has-work .board #preview{touch-action:pan-y;cursor:grab}.canvas-guide{margin:0;padding:8px 16px 0;font-size:11px;color:#647568}.preview-meta{align-items:flex-start}.preview-meta #gestureHint{max-width:65%;text-align:right}.decoration-actions button{flex:1}.has-work .board{background:#5d6660}
 
 .crop-frame-edge{position:absolute;z-index:1;touch-action:none;user-select:none;cursor:move}
+
+.progress-track{overflow:hidden}
+#jobProgress.indeterminate{animation:print-wait 1.6s ease-in-out infinite}
+@keyframes print-wait{0%,100%{transform:translateX(0)}50%{transform:translateX(185%)}}
+@media(prefers-reduced-motion:reduce){#jobProgress.indeterminate{animation:none}}

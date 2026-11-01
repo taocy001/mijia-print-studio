@@ -58,7 +58,7 @@ class Studio:
         if r.path.startswith('/api/admin/') and not can_manage:raise web.HTTPForbidden()
         if r.method=='GET':
             if r.path=='/api/admin/queue':
-                jobs=[{k:v for k,v in self.core.public(j).items() if k!='file'} for j in reversed(self.core.jobs)]
+                jobs=[{k:v for k,v in self.core.public(j).items() if k not in ('file','previewPage')} for j in reversed(self.core.jobs)]
                 return web.json_response({'jobs':jobs[:100]})
             if r.path=='/api/state':
                 own=[j for j in self.core.jobs if j['owner']==session['id']];waiting=[j for j in own if j['phase'] in ('queued','printing','uncertain')];job=waiting[0] if waiting else own[-1] if own else {};public=self.core.public(job)

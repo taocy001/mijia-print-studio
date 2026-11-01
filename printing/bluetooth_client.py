@@ -130,12 +130,13 @@ class BluetoothClient:
         answer=json.loads(crypt(self.key,self.receive(3,7),False).rstrip(b'\0'))
         if answer.get('id')!=seq or 'error' in answer:raise ValueError('Bluetooth RPC rejected or mismatched')
         return answer['result']
-    def upload(self,job,data):
+    def upload(self,job,data,progress=None):
         self.phase = 'photo upload'
         if not data or len(data) > 2097152: raise ValueError('Print stream must be 1..2097152 bytes')
         total=(len(data)+987)//988
         for i,offset in enumerate(range(0,len(data),988),1):
             self.send(frame(4,6,2,self.seq,crypt(self.key,struct.pack('<I',job)+data[offset:offset+988]),total,i));self.seq+=1
+            if progress and (i%12==0 or i==total):progress(min(offset+988,len(data)),len(data))
             if i%3==0:time.sleep(.015)
     def _close_transport(self):
         process,self.p=self.p,None

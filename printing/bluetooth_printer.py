@@ -62,7 +62,7 @@ class BluetoothPrinter:
         sync_directory(self.intent.parent)
 
     def print_photo(self, files, copies=1, sharpen=0, media_size=5012,
-                    log=print, on_lower_quality=None, on_cancel=None, on_state=None):
+                    log=print, on_lower_quality=None, on_cancel=None, on_state=None, on_progress=None):
         self.validate_media(media_size)
         expected_width, expected_height = (1040, 1040) if media_size == 5009 else (1216, 1824)
         if type(copies) is not int or copies < 1:
@@ -115,7 +115,11 @@ class BluetoothPrinter:
         self._record(record)
         if on_state:on_state(dict(record))
         # One stream keeps binary overcoat tails away from final AES zero padding.
-        self.client.upload(job, (coat or b'') + data)
+        payload = (coat or b'') + data
+        if on_progress:
+            self.client.upload(job, payload, lambda sent,total: on_progress(dict(stage='transfer',sentBytes=sent,totalBytes=total,sampleAt=int(time.time()*1000))))
+            on_progress(dict(stage='waiting',sentBytes=len(payload),totalBytes=len(payload),sampleAt=int(time.time()*1000)))
+        else:self.client.upload(job, payload)
         log('传输完成，等待打印机确认打印结果…')
         cancel_sent=False
         for _ in range(150):
@@ -127,6 +131,7 @@ class BluetoothPrinter:
                 raise RuntimeError('打印状态未确认；保留记录，不自动重试')
             info = matches[0]
             state = info.get('job-state')
+            if on_progress:on_progress(dict(stage='waiting',device=terminal_info(info),sampleAt=int(time.time()*1000)))
             if state in (7, 8, 9):
                 self.last_state=state;self.last_info=terminal_info(info)
                 self.intent.unlink()

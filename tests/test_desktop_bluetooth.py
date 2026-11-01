@@ -112,9 +112,20 @@ class WebBluetoothTests(unittest.TestCase):
         if method == 'get-job-info': return [{'job-id': 42, 'job-state': self.state}]
         raise AssertionError(method)
 
-    def upload(self, job, data):
+    def upload(self, job, data, progress=None):
         self.assertEqual(job, 42)
         if self.fail_upload: raise IOError('disconnected')
+        if progress:progress(len(data),len(data))
+
+    def test_live_progress_is_separate_from_lifecycle(self):
+        states=[];samples=[]
+        self.assertTrue(self.printer.print_photo([self.photo],log=lambda _:None,on_state=states.append,on_progress=samples.append))
+        self.assertEqual([s['phase'] for s in states],['creating','uploading','done'])
+        self.assertEqual(samples[0]['stage'],'transfer')
+        self.assertEqual(samples[0]['sentBytes'],samples[0]['totalBytes'])
+        self.assertEqual(samples[-1]['device']['job-state'],9)
+        self.assertNotIn('phase',samples[-1])
+        self.assertEqual(sum(method=='print-job' for method,_ in self.calls),1)
 
     def test_completed_job_clears_intent(self):
         self.assertTrue(self.printer.print_photo([self.photo], log=lambda _: None))
