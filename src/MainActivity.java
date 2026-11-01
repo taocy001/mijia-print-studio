@@ -28,8 +28,7 @@ public final class MainActivity extends Activity {
     private ValueCallback<Uri[]> textFileCallback;
     private final java.util.concurrent.atomic.AtomicBoolean savingProject=new java.util.concurrent.atomic.AtomicBoolean();
     private volatile byte[] pendingProject;
-    private final java.util.concurrent.atomic.AtomicBoolean savingImage=new java.util.concurrent.atomic.AtomicBoolean();
-    private volatile byte[] pendingImage;
+    private static final java.util.concurrent.atomic.AtomicBoolean savingImage=new java.util.concurrent.atomic.AtomicBoolean();
     private final java.util.concurrent.atomic.AtomicBoolean captureWorking=new java.util.concurrent.atomic.AtomicBoolean();
     private boolean captureWebReady;
     private String captureDelivered;
@@ -160,15 +159,36 @@ public final class MainActivity extends Activity {
         }
         @JavascriptInterface public String saveImage(String base64){
             if(!savingImage.compareAndSet(false,true))return "{\"error\":\"已有图片正在保存\"}";
-            try{pendingImage=ProjectFiles.imageBytes(base64);}
-            catch(Exception|OutOfMemoryError error){pendingImage=null;savingImage.set(false);return "{\"error\":\"图片无效或超过 8 MB\"}";}
-            main.post(()->{
-                if(isFinishing()||isDestroyed()){pendingImage=null;savingImage.set(false);event("imageSaved","cancelled");return;}
-                Intent intent=new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-                    .setType("image/jpeg").putExtra(Intent.EXTRA_TITLE,"mijia-photo.jpg");
-                try{startActivityForResult(intent,15);}
-                catch(Exception error){pendingImage=null;savingImage.set(false);event("imageSaved","error");}
-            });
+            final byte[] bytes;
+            try{bytes=ProjectFiles.imageBytes(base64);}
+            catch(Exception|OutOfMemoryError error){savingImage.set(false);return "{\"error\":\"图片无效或超过 8 MB\"}";}
+            if(isFinishing()||isDestroyed()){savingImage.set(false);return "{\"error\":\"保存已取消\"}";}
+            try{
+                final ContentResolver resolver=getApplicationContext().getContentResolver();
+                new Thread(()->{
+                    Uri uri=null;boolean saved=false;
+                    try{
+                        ContentValues values=new ContentValues();
+                        values.put(MediaStore.Images.Media.DISPLAY_NAME,"mijia-photo-"+UUID.randomUUID()+".jpg");
+                        values.put(MediaStore.Images.Media.MIME_TYPE,"image/jpeg");
+                        values.put(MediaStore.Images.Media.RELATIVE_PATH,Environment.DIRECTORY_PICTURES+"/Mijia Print Studio");
+                        values.put(MediaStore.Images.Media.IS_PENDING,1);
+                        uri=resolver.insert(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),values);
+                        if(uri==null)throw new IOException("无法创建图片");
+                        try(OutputStream output=resolver.openOutputStream(uri,"w")){
+                            if(output==null)throw new IOException("无法写入图片");
+                            output.write(bytes);output.flush();
+                        }
+                        values.clear();values.put(MediaStore.Images.Media.IS_PENDING,0);
+                        if(resolver.update(uri,values,null,null)!=1)throw new IOException("无法完成图片保存");
+                        saved=true;
+                    }catch(Exception|OutOfMemoryError error){}
+                    finally{
+                        if(uri!=null&&!saved)try{resolver.delete(uri,null,null);}catch(Exception ignored){}
+                        savingImage.set(false);event("imageSaved",saved?"saved":"error");
+                    }
+                },"liuying-image-save").start();
+            }catch(RuntimeException|OutOfMemoryError error){savingImage.set(false);return "{\"error\":\"无法启动图片保存\"}";}
             return "{\"ok\":true}";
         }
         @JavascriptInterface public String saveProject(String json){
@@ -282,18 +302,6 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
-        if(request==15){
-            byte[] bytes=pendingImage;pendingImage=null;
-            if(bytes==null){savingImage.set(false);return;}
-            if(result!=RESULT_OK){savingImage.set(false);event("imageSaved","cancelled");return;}
-            Uri uri=data==null?null:data.getData();
-            Thread writer=new Thread(()->{
-                try{ProjectFiles.write(MainActivity.this,uri,bytes);event("imageSaved","saved");}
-                catch(Exception error){event("imageSaved","error");}
-                finally{savingImage.set(false);}
-            },"liuying-image-save");
-            try{writer.start();}catch(RuntimeException|OutOfMemoryError error){savingImage.set(false);event("imageSaved","error");}return;
-        }
         if(request==14){receiveCapture(result==RESULT_OK,null);return;}
         if(request==13){
             byte[] bytes=pendingProject;pendingProject=null;
@@ -333,5 +341,5 @@ public final class MainActivity extends Activity {
         },"liuying-import").start();
     }
     @Override public void onBackPressed(){web.evaluateJavascript("window.goBack?window.goBack():false",value->{if(!"true".equals(value))super.onBackPressed();});}
-    @Override protected void onDestroy(){pendingImage=null;savingImage.set(false);captureWebReady=false;pendingProject=null;savingProject.set(false);if(textFileCallback!=null){textFileCallback.onReceiveValue(null);textFileCallback=null;}if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){captureWebReady=false;pendingProject=null;savingProject.set(false);if(textFileCallback!=null){textFileCallback.onReceiveValue(null);textFileCallback=null;}if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
 }

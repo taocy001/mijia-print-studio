@@ -84,7 +84,10 @@ with sync_playwright() as runtime:
     page.wait_for_function("state.photos[0]?.src.includes('33333333')")
     assert uploads==['/api/upload'] and len(stored)==1
     page.locator('#menuBtn').click()
-    with page.expect_download() as download:page.locator('#saveProject').click()
+    page.locator('#saveProject').click();assert page.locator('#projectExportDialog').is_visible()
+    page.locator('#projectExportCancel').click();assert page.evaluate("sheetKind==='menu'")
+    page.locator('#saveProject').click()
+    with page.expect_download() as download:page.locator('#projectExportConfirm').click()
     file=download.value;assert file.suggested_filename=='mijia-project.json'
     saved=json.loads(Path(file.path()).read_text())
     assert saved['editing']['photos'][0]['src']=='a0' and '/private/' not in json.dumps(saved)
