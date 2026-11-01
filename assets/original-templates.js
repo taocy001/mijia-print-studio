@@ -242,7 +242,7 @@ window.OriginalTemplates=(()=>{
   else ornament(ctx,w,h,style,box,mix(130,.65));
   ctx.restore();
   // Keep the shared photo renderer in paper coordinates for editing and overlays.
-  ctx.translate(-x,-y);drawPhoto(ctx,p,x+px,y+py,pw,ph,'cover');ctx.restore();
+  ctx.translate(-x,-y);drawPhoto(ctx,p,x+px,y+py,pw,ph,'cover');ctx.translate(x,y);TemplateEdges.paint(ctx,w,h,style,box);ctx.restore();
  }
  function variant(base,w,h){return {...base,...shape(w,h,base.style)};}
  return {catalog,paint,variant};
