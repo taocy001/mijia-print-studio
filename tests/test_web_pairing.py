@@ -23,8 +23,20 @@ class Pairing(unittest.IsolatedAsyncioTestCase):
         if owner:headers['Cookie']='liuying-owner='+owner
         r=await self.client.post('/api/pair',data={'code':self.studio.code},headers=headers,allow_redirects=False)
         self.assertEqual(r.status,303)
-        cookie=r.cookies['liuying'];self.assertEqual(cookie['max-age'],str(LIFETIME));self.assertTrue(cookie['httponly']);self.assertEqual(cookie['samesite'],'Strict');self.assertEqual(cookie['path'],'/')
+        cookie=r.cookies['liuying'];self.assertEqual(cookie['max-age'],str(LIFETIME));self.assertTrue(cookie['httponly']);self.assertEqual(cookie['samesite'],'Lax');self.assertEqual(cookie['path'],'/')
         return cookie.value,r.cookies['liuying-owner'].value
+    async def test_existing_grant_migrates_without_extending_expiry(self):
+        a=await self.pair()
+        grant=self.studio.pairings.find(a[0]);expiry=grant['expires']
+        response=await self.client.get('/session.js',headers=self.headers(a))
+        cookie=response.cookies['liuying']
+        self.assertEqual(cookie.value,a[0]);self.assertEqual(cookie['samesite'],'Lax')
+        self.assertLessEqual(int(cookie['max-age']),expiry-int(time.time()))
+        self.assertEqual(grant['expires'],expiry)
+        self.assertEqual((await self.client.get('/pair-restore.js')).status,200)
+        self.assertEqual((await self.client.get('/session.js')).status,401)
+        self.assertEqual((await self.client.post('/api/cancel',headers={'Cookie':'liuying='+a[0],'Origin':'http://outside.test'},json={})).status,403)
+
     async def test_icons_are_public_but_editor_and_private_files_are_not(self):
         from PIL import Image
         import io
