@@ -53,6 +53,35 @@ with sync_playwright() as p:
  drag(rect['x']+rect['width']/2,rect['y']+rect['height']*.45,0,-80)
  assert page.evaluate("document.querySelector('.workspace').scrollTop")==0,'Photo drag must not scroll'
  assert page.evaluate('active().y')>old,'Photo interior must move the crop at 1x'
+ # Frame motion must follow every event, not alternate between moving and stalling.
+ page.evaluate("active().x=active().y=0;render()")
+ rect=page.locator('#preview').bounding_box();x=rect['x']+rect['width']*.5;y=rect['y']+rect['height']*.35
+ origin=page.evaluate("()=>{const c=$('preview'),r=c.getBoundingClientRect(),v=CropEditor.geometry();return r.y+v.ty*r.height/c.height}")
+ touch('touchStart',x,y)
+ for step in range(1,13):
+  touch('touchMove',x,y+step*2);page.wait_for_timeout(35)
+  position=page.evaluate("()=>{const c=$('preview'),r=c.getBoundingClientRect(),v=CropEditor.geometry();return r.y+v.ty*r.height/c.height}")
+  assert abs(position-origin-step*2)<1,(step,position-origin)
+ touch('touchEnd');page.wait_for_timeout(100)
+ for _ in range(3):
+  page.evaluate('render()');page.wait_for_timeout(30)
+  stopped=page.evaluate("()=>{const c=$('preview'),r=c.getBoundingClientRect(),v=CropEditor.geometry();return r.y+v.ty*r.height/c.height}")
+  assert abs(stopped-position)<.1
+ # Changing finger count must not move the crop when screen positions stay fixed.
+ page.evaluate("""()=>{const c=$('preview'),r=c.getBoundingClientRect();
+  window.cropTouches=[{clientX:r.x+r.width*.4,clientY:r.y+r.height*.4},{clientX:r.x+r.width*.6,clientY:r.y+r.height*.4}];
+  window.cropTouchEvent=(name,points)=>{const e=new Event(name,{bubbles:true,cancelable:true});Object.defineProperty(e,'touches',{value:points});c.dispatchEvent(e)};
+  cropTouchEvent('touchstart',cropTouches.slice(0,1));}""")
+ snapshot=page.evaluate('({x:active().x,y:active().y,zoom:active().zoom})')
+ page.evaluate("cropTouchEvent('touchstart',cropTouches);cropTouchEvent('touchmove',cropTouches)")
+ assert page.evaluate('({x:active().x,y:active().y,zoom:active().zoom})')==snapshot
+ page.evaluate("cropTouchEvent('touchend',cropTouches.slice(0,1));cropTouchEvent('touchmove',cropTouches.slice(0,1))")
+ assert page.evaluate('({x:active().x,y:active().y,zoom:active().zoom})')==snapshot
+ # Orientation changes cancel the gesture; a remaining finger must be harmless.
+ page.evaluate("cropTouchEvent('touchstart',cropTouches);dispatchEvent(new Event('resize'));cropTouchEvent('touchend',cropTouches.slice(0,1));cropTouchEvent('touchmove',cropTouches.slice(0,1));cropTouchEvent('touchend',[])")
+ page.wait_for_timeout(100)
+ assert page.evaluate('({x:active().x,y:active().y,zoom:active().zoom})')==snapshot
+ assert not errors,errors
  page.evaluate("state.mode='template';active().templateId=state.templateId='studio-confetti';active().x=active().y=0;render()")
  rect=page.locator('#preview').bounding_box();drag(rect['x']+rect['width']*.5,rect['y']+rect['height']*.4,0,-35)
  assert page.evaluate('active().y')<0,'Template photo must drag at 1x'
