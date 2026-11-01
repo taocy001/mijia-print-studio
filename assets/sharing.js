@@ -4,6 +4,7 @@
  function render(s){
   const urls=[...new Set([...(s.addresses||[]),s.current].filter(u=>{try{return new URL(u).protocol==='http:';}catch(e){return false;}}))];
   let html=s.running?`<p class="hint">${s.lan?'同一 Wi-Fi 下的浏览器可访问。':'服务仅允许本机访问。'}${controls?'关闭共享后，配对失效。':''}</p>`:'<p class="hint">浏览器使用同一套编辑器，由这台手机通过蓝牙打印。开启后请保留运行通知。</p>';
+  if(s.name||s.airprintName)html+=`<div class="info-row"><span>共享服务</span><strong>${esc(s.name||s.airprintName)}</strong></div>`;
   html+=urls.map((u,i)=>`<div class="share-address"><label for="shareAddress${i}">${/\/\/(127\.|localhost)/.test(u)?'本机地址':'共享打印 HTTP 地址'}</label><input id="shareAddress${i}" readonly value="${esc(u)}" aria-label="共享打印 HTTP 地址"><button data-copy-address="${i}">复制</button></div>`).join('');
   if(s.running&&!urls.length)html+='<p class="hint">暂未获取到 Wi-Fi 地址，请检查服务设备的网络连接。</p>';
   if(controls){
