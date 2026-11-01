@@ -19,6 +19,9 @@ def main():
     for name in ('classes','dex','generated','onnxruntime'):
         shutil.rmtree(BUILD/name,ignore_errors=True)
         (BUILD/name).mkdir(parents=True,exist_ok=True)
+    policy=BUILD/'asset-policy';policy.mkdir(exist_ok=True)
+    run(JDK/'bin/javac','-d',policy,ROOT/'src/AssetPolicy.java',ROOT/'tests/AssetPolicyTest.java')
+    run(JDK/'bin/java','-cp',policy,'local.liuying.studio.AssetPolicyTest',ROOT/'assets')
     for name,checksum in json.loads((ROOT/'deps/checksums.json').read_text()).items():
         if hashlib.sha256((ROOT/name).read_bytes()).hexdigest()!=checksum:raise RuntimeError('Dependency checksum mismatch: '+name)
     runtime=BUILD/'onnxruntime';runtime.mkdir(exist_ok=True)

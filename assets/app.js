@@ -130,8 +130,8 @@ function drawPanel(ctx,x,y,w,h,photos){
  else drawPhoto(ctx,first,x+margin,y+margin,innerW,innerH);
  if(caption){const band=Math.max(65,h*.065);ctx.fillStyle='#fffef5e8';ctx.fillRect(x,y+h-band,w,band);text(ctx,caption,x+w/2,y+h-band/2,Math.min(w*.031,43),'#52624c','center','sans-serif',w*.9);}
 }
-function compose(includeLayers=true,layerMode='photo'){
- const [w,h]=logicalSize(),canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h);
+function compose(includeLayers=true,layerMode='photo',labelPage=0){
+ const [w,h]=logicalSize(),canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d');ctx.labelBatchOffset=labelPage*NameLabels.count();ctx.fillStyle='#ffffff';ctx.fillRect(0,0,w,h);
  if(peek&&active()){drawPhoto(ctx,active(),0,0,w,h,'contain');return canvas;}
  const photos=state.mode==='collage'?state.photos:[active()];
  const frames=[],previousFrames=composingFrames;composingFrames=frames;
@@ -158,7 +158,7 @@ function render(){
  if(has){photoFrames=[];collectingPhotoFrames=true;const output=compose(true,'editor');printPreview=output;collectingPhotoFrames=false;const canvas=$('preview');canvas.width=output.width;canvas.height=output.height;canvas.getContext('2d').drawImage(output,0,0);}
  const photoMarkup=state.photos.map((p,i)=>`<div class="photo-thumb"><button class="photo-item ${i===state.active?'selected':''}" data-photo="${i}" aria-label="选择第 ${i+1} 张照片"><img src="${esc(p.src)}" alt=""></button><button class="remove-photo" data-remove-photo="${i}" aria-label="删除第 ${i+1} 张照片">${icon('close')}</button></div>`).join('')+(state.photos.length<6?`<button class="add-photo" id="addMore" aria-label="添加照片">${icon('plus')}</button>`:'');
  if($('photos').innerHTML!==photoMarkup)$('photos').innerHTML=photoMarkup;
- $('layoutSummary').textContent=state.mode==='label'?NameLabels.count()+' 枚姓名贴':state.mode==='card'?'卡片':state.mode==='calendar'?state.month:state.mode==='id'?state.idSize.replace('x',' × ')+' mm':state.fit==='bottom'?'底部留白 '+(state.border*25.4/300).toFixed(1)+' mm':state.border?'白边 '+(state.border*25.4/300).toFixed(1)+' mm':state.fit==='cover'?'铺满相纸':'完整保留';
+ $('layoutSummary').textContent=state.mode==='label'?(LabelBatch.enabled()?LabelBatch.summary():NameLabels.count()+' 枚姓名贴'):state.mode==='card'?'卡片':state.mode==='calendar'?state.month:state.mode==='id'?state.idSize.replace('x',' × ')+' mm':state.fit==='bottom'?'底部留白 '+(state.border*25.4/300).toFixed(1)+' mm':state.border?'白边 '+(state.border*25.4/300).toFixed(1)+' mm':state.fit==='cover'?'铺满相纸':'完整保留';
  $('filterSummary').textContent=['label','card'].includes(state.mode)?'固定配色':filter()[1];$('filterBtn').disabled=['label','card'].includes(state.mode)||(state.mode==='calendar'&&(state.calendarLayout==='plain'||state.media===5014));$('textBtn').disabled=!has;$('textSummary').textContent=['label','card'].includes(state.mode)?'姓名与小字':'自由排版';
  if(window.CropEditor)CropEditor.render();if(window.LayerEditor)LayerEditor.refresh();
  updateStatus();
@@ -171,7 +171,7 @@ function updateStatus(){
 
  $('printBtn').disabled=!ready()||native.busy||native.unresolved;
  $('dockTitle').textContent=ready()?'一张，刚刚好。':'准备好你的第一张';
- $('dockMeta').textContent=`${PAPER[state.media][0]} · ${state.mode==='collage'?Math.min(6,state.photos.length)+' 张拼成 1 张':state.media===5014?'上下两幅 · 1 张':'单张打印'}`;
+ $('dockMeta').textContent=`${PAPER[state.media][0]} · ${LabelBatch.enabled()?LabelBatch.pages()+' 张姓名贴':state.mode==='collage'?Math.min(6,state.photos.length)+' 张拼成 1 张':state.media===5014?'上下两幅 · 1 张':'单张打印'}`;
  const d=native.device||{},fresh=d.connected&&(Date.now()-d.checkedAt<60000);
  $('deviceText').textContent=native.busy?native.message:fresh?`蓝牙可用${d.alert&&d.alert!=='::0'?' · 设备有告警':d.state==='30'?' · 待机':' · 按需连接'}`:'点击检测打印机';
  const j=displayJob();window.PrintProcess?.update(j);if(sheetKind==='job'&&$('liveJobMessage'))$('liveJobMessage').textContent=j.message||'暂无任务';$('jobBanner').hidden=!j.token||(!native.busy&&!native.unresolved&&!['rejected','aborted','blocked','uncertain','held'].includes(j.phase));
@@ -218,7 +218,7 @@ async function openFilters(){
  if(request!==filterRequest||sheetKind!=='filters')return;const source=images.get(src)||images.get('/sample.svg');if(source)for(const img of $('sheetBody').querySelectorAll('[data-tone]')){img.src=Tone.image(source,img.dataset.tone,true).toDataURL('image/jpeg',.9);img.hidden=false;}
 }
 
-function openLegacyText(){let html=['label','card'].includes(state.mode)?`<div class="field"><label>姓名或主标题</label><input id="labelInput" type="text" maxlength="30" value="${esc(state.mode==='label'?state.labelTitle:state.cardTitle)}" placeholder="写下名字"></div><div class="field"><label>第二行小字</label><input id="subtitleInput" type="text" maxlength="50" value="${esc(state.mode==='label'?state.labelSubtitle:state.cardSubtitle)}"></div>`:`<div class="field"><label>想留在照片上的话 <span>最多 40 字</span></label><input id="captionInput" type="text" maxlength="40" value="${esc(active()?.caption??state.caption)}" placeholder="比如：和你在一起的每一天"></div><p class="hint">${['calendar','id'].includes(state.mode)?'月历和证件照采用固定版式，不叠加文字。':'文字会显示在照片底部，留空即可隐藏。'}</p>`;
+function openLegacyText(){if(state.mode==='label'){LabelBatch.open();return;}let html=['label','card'].includes(state.mode)?`<div class="field"><label>姓名或主标题</label><input id="labelInput" type="text" maxlength="30" value="${esc(state.mode==='label'?state.labelTitle:state.cardTitle)}" placeholder="写下名字"></div><div class="field"><label>第二行小字</label><input id="subtitleInput" type="text" maxlength="50" value="${esc(state.mode==='label'?state.labelSubtitle:state.cardSubtitle)}"></div>`:`<div class="field"><label>想留在照片上的话 <span>最多 40 字</span></label><input id="captionInput" type="text" maxlength="40" value="${esc(active()?.caption??state.caption)}" placeholder="比如：和你在一起的每一天"></div><p class="hint">${['calendar','id'].includes(state.mode)?'月历和证件照采用固定版式，不叠加文字。':'文字会显示在照片底部，留空即可隐藏。'}</p>`;
  openSheet('text','不止一张照片',html+'<button class="full-button" data-close>完成</button>');}
 function openPaper(){
  const tray=detectedPaper();
@@ -267,14 +267,18 @@ async function reprintOriginal(job){
 }
 function openJob(){const j=displayJob();if(j.phase==='queued'){openSheet('job','等待打印',`<p id="liveJobMessage" class="hint">${esc(j.message)}</p><button class="full-button danger-button" id="cancelJob">取消等待中的任务</button>`);return;}openSheet('job','打印进度',`<p id="liveJobMessage" style="line-height:1.9">${esc(j.message||'暂无任务')}</p><div class="info-row"><span>作品</span><strong>${esc(j.title||'照片')}</strong></div><div class="info-row"><span>任务编号</span><strong>${j.jobId||'尚未获得'}</strong></div><div class="info-row"><span>打印数量</span><strong>${j.batchCount||1} 个作品 · 每个 ${j.copies||1} 份</strong></div>${native.unresolved?`<button class="full-button" id="reconcileJob" ${native.busy?'disabled':''}>重新读取任务状态</button>${!j.jobId&&j.phase!=='prepared'?'<button class="full-button secondary-button" id="resolveUnknown">已检查打印机，结束本次记录</button>':''}<button class="full-button danger-button" id="cancelJob">${j.phase==='prepared'?'取消尚未提交的任务':'请求取消任务'}</button><p class="hint">中断后只检查原任务，不会自动重复提交照片。</p>`:'<button class="full-button" data-close>完成</button>'}`);}
 async function preparePrintPages(){
+ if(LabelBatch.enabled()){LabelBatch.validate();const pages=[];for(let i=0;i<LabelBatch.pages();i++)pages.push(...await prepareSinglePrintPages(i));return pages;}
+ return prepareSinglePrintPages();
+}
+async function prepareSinglePrintPages(labelPage=0){
  const original=state.active,originalMode=state.mode,originalTemplate=state.templateId,wasPeek=peek,pages=[];
  const step=state.mode==='idcard'?StudioExtras.idCardCapacity():state.media===5014?2:1;
  const indices=state.mode==='collage'||['label','card'].includes(state.mode)||(state.mode==='calendar'&&(state.calendarLayout==='plain'||state.media===5014))?[original]:step===2?state.photos.map((_,i)=>i).filter(i=>i%2===0):state.photos.map((_,i)=>i);
- try{if(['label','card'].includes(state.mode))await NameLabels.ready;if(state.mode==='card')await CardArt.ready;peek=false;for(const index of indices){state.active=index;if(['photo','template'].includes(originalMode)){state.mode=active()?.templateId?'template':'photo';state.templateId=active()?.templateId;}if(window.TemplateStudio)await TemplateStudio.ensureCurrent();const logical=compose(),output=physical(logical);let jpeg;
+ try{if(['label','card'].includes(state.mode))await NameLabels.ready;if(state.mode==='card')await CardArt.ready;peek=false;for(const index of indices){state.active=index;if(['photo','template'].includes(originalMode)){state.mode=active()?.templateId?'template':'photo';state.templateId=active()?.templateId;}if(window.TemplateStudio)await TemplateStudio.ensureCurrent();const logical=compose(true,'photo',labelPage),output=physical(logical);let jpeg;
   for(const quality of [.92,.90,.85,.80]){jpeg=output.toDataURL('image/jpeg',quality);if(atob(jpeg.split(',')[1]).length<=1048576)break;}
   if(atob(jpeg.split(',')[1]).length>1048576)throw Error('作品数据较大，请减少拼图照片后重试');
-  const oc=physical(compose(true,'mask'));const pixels=oc.getContext('2d').getImageData(0,0,oc.width,oc.height).data;let hasOc=false;for(let i=0;i<pixels.length;i+=4){if(pixels[i]>100){hasOc=true;break;}}
-  pages.push({ocMask:hasOc?oc.toDataURL('image/png').split(',')[1]:null,sharpen:photoSharpness(state.mode==='collage'?state.photos[0]:active()),copies:state.copies||1,threshold:(state.mode==='collage'?state.photos[0]:active())?.coatThreshold||state.coatThreshold||100,base64:jpeg.split(',')[1],preview:logical.toDataURL('image/jpeg',.72),media:state.media,title:MODES.find(m=>m[0]===state.mode)[1],orientation:logical.width===logical.height?'square':logical.width>logical.height?'landscape':'portrait'});
+  const oc=physical(compose(true,'mask',labelPage));const pixels=oc.getContext('2d').getImageData(0,0,oc.width,oc.height).data;let hasOc=false;for(let i=0;i<pixels.length;i+=4){if(pixels[i]>100){hasOc=true;break;}}
+  pages.push({ocMask:hasOc?oc.toDataURL('image/png').split(',')[1]:null,sharpen:photoSharpness(state.mode==='collage'?state.photos[0]:active()),copies:state.copies||1,threshold:(state.mode==='label'?null:state.mode==='collage'?state.photos[0]:active())?.coatThreshold||state.coatThreshold||100,base64:jpeg.split(',')[1],preview:logical.toDataURL('image/jpeg',.72),media:state.media,title:MODES.find(m=>m[0]===state.mode)[1],orientation:logical.width===logical.height?'square':logical.width>logical.height?'landscape':'portrait'});
  }}finally{state.active=original;state.mode=originalMode;state.templateId=originalTemplate;peek=wasPeek;await TemplateStudio?.ensureCurrent();}
  return pages;
 }
@@ -284,7 +288,7 @@ async function confirmPrint(){
  $('printBtn').disabled=true;
  try{const pages=await preparePrintPages();if(!pages.length)return;
   pendingPrint={pages};
-  openSheet('confirm','打印预览',`<div class="print-pages">${pages.map((p,i)=>`<figure><div class="confirmation-preview"><img src="${p.preview}" alt="第 ${i+1} 张最终打印效果"></div><figcaption>第 ${i+1} / ${pages.length} 张 · ${p.orientation==='square'?'方形':p.orientation==='landscape'?'横版':'竖版'} · ${p.copies} 份${p.ocMask?' · 含覆膜隐藏内容':''}</figcaption></figure>`).join('')}</div><div class="confirm-summary"><strong>${PAPER[state.media][0]} · 共 ${pages.reduce((n,p)=>n+p.copies,0)} 张相纸</strong><span>${filter()[1]}</span></div><p class="hint">${state.media===5014&&!(state.mode==='collage'&&state.collageLayout==='strip')&&state.photos.length%2?'最后一张照片重复填满上下两格。':''}${state.media===5014?'同页覆膜深浅使用第一张照片的设置。':''}${pages.length>1?'上下滑动查看全部打印页。':''}将依次打印以上全部内容；中断时停止后续照片，不会自动重复打印。</p><button class="full-button" id="confirmSend">${icon('printer')} 确认打印 ${pages.reduce((n,p)=>n+p.copies,0)} 张</button>`);
+  openSheet('confirm','打印预览',`<div class="print-pages">${pages.map((p,i)=>`<figure><div class="confirmation-preview"><img src="${p.preview}" alt="第 ${i+1} 张最终打印效果"></div><figcaption>第 ${i+1} / ${pages.length} 张 · ${p.orientation==='square'?'方形':p.orientation==='landscape'?'横版':'竖版'} · ${p.copies} 份${p.ocMask?' · 含覆膜隐藏内容':''}</figcaption></figure>`).join('')}</div><div class="confirm-summary"><strong>${PAPER[state.media][0]} · 共 ${pages.reduce((n,p)=>n+p.copies,0)} 张相纸</strong><span>${filter()[1]}</span></div><p class="hint">${state.media===5014&&!['label','card','calendar','idcard'].includes(state.mode)&&!(state.mode==='collage'&&state.collageLayout==='strip')&&state.photos.length%2?'最后一张照片重复填满上下两格。':''}${state.media===5014&&state.mode!=='label'?'同页覆膜深浅使用第一张照片的设置。':''}${pages.length>1?'上下滑动查看全部打印页。':''}将依次打印以上全部内容；中断时停止后续照片，不会自动重复打印。</p><button class="full-button" id="confirmSend">${icon('printer')} 确认打印 ${pages.reduce((n,p)=>n+p.copies,0)} 张</button>`);
   window.PaperPreview?.mount($('sheetBody'),pages);
  }catch(e){toast(e.message||'无法生成打印预览');}finally{updateStatus();}
 }

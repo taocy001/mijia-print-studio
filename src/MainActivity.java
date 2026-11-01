@@ -25,6 +25,7 @@ public final class MainActivity extends Activity {
     private final java.util.concurrent.atomic.AtomicBoolean cutting=new java.util.concurrent.atomic.AtomicBoolean();
     private boolean picking,sharingAirPrint;
     private int pickLimit=6;
+    private ValueCallback<Uri[]> textFileCallback;
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
         try{Store.recover(this);}catch(Exception e){android.util.Log.w("LiuyingPrint","Recovery state could not be saved");}
@@ -60,7 +61,17 @@ public final class MainActivity extends Activity {
                 }catch(Exception e){return new WebResourceResponse("text/plain","UTF-8",404,"Not Found",Collections.emptyMap(),new ByteArrayInputStream(new byte[0]));}
             }
         });
-        web.setWebChromeClient(new WebChromeClient(){@Override public boolean onConsoleMessage(ConsoleMessage m){android.util.Log.d("LiuyingUI",m.message()+" @"+m.lineNumber());return true;}});
+        web.setWebChromeClient(new WebChromeClient(){
+            @Override public boolean onConsoleMessage(ConsoleMessage m){android.util.Log.d("LiuyingUI",m.message()+" @"+m.lineNumber());return true;}
+            @Override public boolean onShowFileChooser(WebView view,ValueCallback<Uri[]> callback,FileChooserParams params){
+                if(textFileCallback!=null){callback.onReceiveValue(null);return true;}
+                textFileCallback=callback;
+                Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/*");
+                intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"text/plain","text/csv","application/csv"});
+                try{startActivityForResult(intent,12);}catch(ActivityNotFoundException e){textFileCallback=null;callback.onReceiveValue(null);event("toast","无法打开文件选择器");}
+                return true;
+            }
+        });
         web.loadUrl("https://"+HOST+"/");
     }
     private void updateSystemTheme(){
@@ -181,7 +192,11 @@ public final class MainActivity extends Activity {
         });}
     }
     @Override protected void onActivityResult(int request,int result,Intent data){
-        super.onActivityResult(request,result,data);if(request!=10&&request!=11)return;picking=false;
+        super.onActivityResult(request,result,data);
+        if(request==12){ValueCallback<Uri[]> callback=textFileCallback;textFileCallback=null;
+            Uri uri=result==RESULT_OK&&data!=null?data.getData():null;
+            if(callback!=null)callback.onReceiveValue(uri!=null&&"content".equals(uri.getScheme())?new Uri[]{uri}:null);return;}
+        if(request!=10&&request!=11)return;picking=false;
         if(result!=RESULT_OK||data==null)return;
         int limit=request==11?1:pickLimit;
         if(data.getClipData()!=null&&data.getClipData().getItemCount()>limit){event("toast","本次最多选择 "+limit+" 张照片，请重新选择");return;}
@@ -204,5 +219,5 @@ public final class MainActivity extends Activity {
         },"liuying-import").start();
     }
     @Override public void onBackPressed(){web.evaluateJavascript("window.goBack?window.goBack():false",value->{if(!"true".equals(value))super.onBackPressed();});}
-    @Override protected void onDestroy(){if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){if(textFileCallback!=null){textFileCallback.onReceiveValue(null);textFileCallback=null;}if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
 }
