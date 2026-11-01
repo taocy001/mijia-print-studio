@@ -192,7 +192,7 @@ function updateStatus(){
  $('printBtn').disabled=!ready();
  $('dockTitle').textContent=ready()?'一张，刚刚好。':'准备好你的第一张';
  $('dockMeta').textContent=`${PAPER[state.media][0]} · ${LabelBatch.enabled()?LabelBatch.pages()+' 张姓名贴':state.mode==='collage'?Math.min(6,state.photos.length)+' 张拼成 1 张':state.media===5014?'上下两幅 · 1 张':'单张打印'}`;
- const connect=$('connectBeforePrint');if(connect)connect.hidden=!!tray&&!!native.permission;
+ const connect=$('connectBeforePrint');if(connect){connect.hidden=!!tray&&!!native.permission;connect.disabled=!!(detectionPending||native.busy||native.unresolved);connect.innerHTML=icon('printer')+' '+(detectionPending||native.busy?'正在处理…':native.unresolved?'请先处理当前任务':'检测打印机');}
  const d=native.device||{},fresh=d.connected&&(Date.now()-d.checkedAt<60000);
  $('deviceText').textContent=native.busy?(native.unresolved?native.message:'正在读取打印机状态'):fresh?`蓝牙可用${d.alert&&d.alert!=='::0'?' · 设备有告警':d.state==='30'?' · 待机':' · 按需连接'}`:'点击检测打印机';
  const j=displayJob();window.PrintProcess?.update({...j,message:printMessage(j)});if(sheetKind==='job'&&$('liveJobMessage'))$('liveJobMessage').textContent=printMessage(j)||'暂无任务';$('jobBanner').hidden=!j.token||['done','cancelled'].includes(j.phase)||(!native.unresolved&&['rejected','aborted'].includes(j.phase)&&failureAcknowledged(j));
@@ -249,7 +249,7 @@ let deviceSheetSignature='',paperSheetSignature='',detectionPending=false;
 function printerDetectionButton(id='connectNow'){const busy=detectionPending||native.busy;return `<button class="full-button" id="${id}" ${busy||native.unresolved?'disabled':''} aria-busy="${!!busy}">${icon('printer')} ${busy?'正在处理…':native.unresolved?'请先处理当前任务':'检测打印机'}</button>`;}
 async function detectPrinter(button){
  if(detectionPending||native.busy||native.unresolved)return;
- detectionPending=true;button.disabled=true;refreshDeviceSheet();window.dispatchEvent(new Event('studio-state'));
+ detectionPending=true;button.disabled=true;updateStatus();refreshDeviceSheet();window.dispatchEvent(new Event('studio-state'));
  try{await bridge('connect');await new Promise(resolve=>setTimeout(resolve,250));}
  catch(e){toast(e.message||'检测未完成，请重试');}
  finally{detectionPending=false;poll();}
@@ -342,7 +342,7 @@ async function confirmPrint(){
  $('printBtn').disabled=true;
  try{const pages=await preparePrintPages();if(!pages.length)return;
   pendingPrint={pages};
-  openSheet('confirm','打印预览',`<div class="print-pages">${pages.map((p,i)=>`<figure><div class="confirmation-preview"><img src="${p.preview}" alt="第 ${i+1} 张最终打印效果"></div><figcaption>第 ${i+1} / ${pages.length} 张 · ${p.orientation==='square'?'方形':p.orientation==='landscape'?'横版':'竖版'} · ${p.copies} 份${p.ocMask?' · 含覆膜隐藏内容':''}</figcaption></figure>`).join('')}</div><div class="confirm-summary"><strong>${PAPER[state.media][0]} · 共 ${pages.reduce((n,p)=>n+p.copies,0)} 张相纸</strong><span>${filter()[1]}</span></div><p class="hint">${state.media===5014&&!['label','card','calendar','idcard'].includes(state.mode)&&!(state.mode==='collage'&&state.collageLayout==='strip')&&state.photos.length%2?'最后一张照片重复填满上下两格。':''}${state.media===5014&&state.mode!=='label'?'同页覆膜深浅使用第一张照片的设置。':''}${pages.length>1?'上下滑动查看全部打印页。':''}将依次打印以上全部内容；中断时停止后续照片，不会自动重复打印。</p><button class="full-button secondary-button" id="connectBeforePrint">连接打印机并识别相纸</button><button class="full-button" id="confirmSend">${icon('printer')} 确认打印 ${pages.reduce((n,p)=>n+p.copies,0)} 张</button>`);
+  openSheet('confirm','打印预览',`<div class="print-pages">${pages.map((p,i)=>`<figure><div class="confirmation-preview"><img src="${p.preview}" alt="第 ${i+1} 张最终打印效果"></div><figcaption>第 ${i+1} / ${pages.length} 张 · ${p.orientation==='square'?'方形':p.orientation==='landscape'?'横版':'竖版'} · ${p.copies} 份${p.ocMask?' · 含覆膜隐藏内容':''}</figcaption></figure>`).join('')}</div><div class="confirm-summary"><strong>${PAPER[state.media][0]} · 共 ${pages.reduce((n,p)=>n+p.copies,0)} 张相纸</strong><span>${filter()[1]}</span></div><p class="hint">${state.media===5014&&!['label','card','calendar','idcard'].includes(state.mode)&&!(state.mode==='collage'&&state.collageLayout==='strip')&&state.photos.length%2?'最后一张照片重复填满上下两格。':''}${state.media===5014&&state.mode!=='label'?'同页覆膜深浅使用第一张照片的设置。':''}${pages.length>1?'上下滑动查看全部打印页。':''}将依次打印以上全部内容；中断时停止后续照片，不会自动重复打印。</p>${printerDetectionButton('connectBeforePrint')}<button class="full-button" id="confirmSend">${icon('printer')} 确认打印 ${pages.reduce((n,p)=>n+p.copies,0)} 张</button>`);
   window.PaperPreview?.mount($('sheetBody'),pages);
  }catch(e){toast(e.message||'无法生成打印预览');}finally{updateStatus();}
 }
@@ -373,7 +373,7 @@ $('sheetBody').addEventListener('click',async e=>{
   }catch(e){toast('历史照片无法读取，文件可能已清理。请重新选择原照片。');}
   finally{if(b.isConnected)b.disabled=false;}
  }
- else if(b.id==='connectBeforePrint'){openDevice();}
+ else if(b.id==='connectBeforePrint'){await detectPrinter(b);}
  else if(b.id==='connectNow'){await detectPrinter(b);}
  else if(b.id==='releaseBluetooth'){await deviceAction(b,'release');}else if(b.id==='airprintLayout'){await deviceAction(b,'airprintLayout',!native.airprintSplice);}else if(b.id==='changePaper')openPaper();else if(b.id==='systemBluetooth')bridge('bluetoothSettings');
  else if(b.id==='confirmSend'){

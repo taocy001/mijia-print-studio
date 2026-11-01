@@ -2,7 +2,7 @@ package local.liuying.studio;
 import android.content.Context;
 import org.json.*;
 final class PrinterStatus {
- static volatile boolean released=true;
+ static volatile boolean released=false;
  static volatile boolean splice=false;
  static volatile boolean verifiedSession,runningSession;
  private static long lastAttempt;
@@ -24,11 +24,12 @@ final class PrinterStatus {
    if(manual)released=false;
    if(released||Store.busy||!manual&&System.currentTimeMillis()-lastAttempt<60000)return;
    JSONObject job=Store.read(context,"job.json");if(job.has("token")&&!Store.terminal(job))return;
-   lastAttempt=System.currentTimeMillis();Store.busy=true;
+   lastAttempt=System.currentTimeMillis();Store.busy=true;Store.message="正在检测打印机";
   }
-  new Thread(()->{try(Printer printer=new Printer(context)){Store.device=printer.status();Store.message="蓝牙可用 · 按需连接";}
+  try{new Thread(()->{try(Printer printer=new Printer(context)){Store.device=printer.status();Store.message="蓝牙可用 · 按需连接";}
    catch(Exception e){invalidate();Store.message="蓝牙暂不可用，请检查打印机电源、距离或其他设备连接";}
-   finally{Store.busy=false;SharingService.refreshAdvertisement();}},"liuying-status").start();
+   finally{Store.busy=false;SharingService.refreshAdvertisement();}},"liuying-status").start();}
+  catch(RuntimeException|OutOfMemoryError error){try{invalidate();Store.message="暂时无法启动检测，请稍后重试";}finally{Store.busy=false;SharingService.refreshAdvertisement();}}
  }
  static void release(Context context)throws Exception{
   synchronized(Store.LOCK){JSONObject j=Store.read(context,"job.json");if(Store.busy||j.has("token")&&!Store.terminal(j))throw new java.io.IOException("请等待当前任务结束");
