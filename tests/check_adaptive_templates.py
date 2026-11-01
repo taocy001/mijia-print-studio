@@ -18,13 +18,14 @@ with sync_playwright() as runtime:
       const photo=async(color)=>{const c=document.createElement('canvas');c.width=600;c.height=900;const x=c.getContext('2d');x.fillStyle=color;x.fillRect(0,0,600,900);const p={src:c.toDataURL(),filter:'none',zoom:1,x:0,y:0,turn:0,fit:'cover',border:0,overlays:[]};await loadPhoto(p);return p;};
       const red=await photo('#d22d3c'),blue=await photo('#2864c8');state.photos=[red,blue];state.active=0;
       const render=(p,t,w,h,baseline='alphabetic')=>{const e=OriginalTemplates.variant(t,w,h),c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').textBaseline=baseline;OriginalTemplates.paint(c.getContext('2d'),p,0,0,w,h,e);return {e,c};};
-      const edge=p=>Array.from(render(p,TEMPLATE_CATALOG[0],1040,1040).c.getContext('2d').getImageData(1,1,1,1).data).slice(0,3);
+      const edge=p=>Array.from(render(p,TEMPLATE_CATALOG.find(t=>t.id==='studio-air'),1040,1040).c.getContext('2d').getImageData(1,1,1,1).data).slice(0,3);
       const mixCanvas=document.createElement('canvas');mixCanvas.width=600;mixCanvas.height=900;const mx=mixCanvas.getContext('2d');
       for(const [x,w,color] of [[0,240,'#d22d3c'],[240,220,'#dddddd'],[460,140,'#2864c8']]){mx.fillStyle=color;mx.fillRect(x,0,w,900);}
       const mixed={...red,src:mixCanvas.toDataURL()};await loadPhoto(mixed);const mixedEdge=edge(mixed);
       const redEdge=edge(red),blueEdge=edge(blue);red.filter='bw';const bw=edge(red);red.filter='sepia';const sepia=edge(red);red.filter='none';
       const restored=edge(red);red.zoom=2;red.x=.7;red.y=-.5;const moved=edge(red);red.zoom=1;red.x=red.y=0;
       if(TEMPLATE_CATALOG.length!==30)throw Error('Expected 30 original templates');
+      if(TEMPLATE_CATALOG.slice(0,10).map(t=>t.style).join()!==KidsTemplates.designs.map(d=>d[0]).join())throw Error('Children templates must come first');
       const failures=[],tiles=[];
       for(const template of TEMPLATE_CATALOG){
         const a=OriginalTemplates.variant(template,1216,1824),b=OriginalTemplates.variant(template,1824,1216);
