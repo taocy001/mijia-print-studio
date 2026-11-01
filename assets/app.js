@@ -168,7 +168,7 @@ function render(){
  $('layoutSummary').textContent=state.mode==='label'?(LabelBatch.enabled()?LabelBatch.summary():NameLabels.count()+' 枚姓名贴'):state.mode==='card'?'卡片':state.mode==='calendar'?state.month:state.mode==='id'?state.idSize.replace('x',' × ')+' mm':state.fit==='bottom'?'底部留白 '+(state.border*25.4/300).toFixed(1)+' mm':state.border?'白边 '+(state.border*25.4/300).toFixed(1)+' mm':state.fit==='cover'?'铺满相纸':'完整保留';
  $('filterSummary').textContent=['label','card'].includes(state.mode)?'固定配色':filter()[1];$('filterBtn').disabled=['label','card'].includes(state.mode)||(state.mode==='calendar'&&(state.calendarLayout==='plain'||state.media===5014));$('textBtn').disabled=!has;$('templateBtn').disabled=!['photo','template'].includes(state.mode);$('addTextQuick').disabled=!has;$('addEmojiQuick').disabled=!has;$('textSummary').textContent=['label','card'].includes(state.mode)?'姓名与小字':'自由排版';
  if(window.CropEditor)CropEditor.render();if(window.LayerEditor)LayerEditor.refresh();
- updateStatus();
+ updateStatus();if(sheetKind==='layout')paintLayoutFitChoices();
 }
 const jobNotifications=new Map();
 function notifyJobCompletion(job={}){
@@ -221,9 +221,30 @@ $('settingsBack').onclick=()=>{if(sheetKind==='paper')openDevice();else if(['his
 window.goBack=()=>{if(sheetKind){closeSheet();return true;}if(window.LayerEditor&&LayerEditor.selected()){LayerEditor.select(null);return true;}return false;};
 function segments(key,choices){return `<div class="segments">${choices.map(([v,n])=>`<button data-setting="${key}" data-value="${v}" class="${String(state[key])===String(v)?'selected':''}">${n}</button>`).join('')}</div>`;}
 function openWorkType(){openSheet('workType','打印类型',`<div class="mode-grid">${MODES.filter(m=>m[0]!=='template').map(([key,name])=>`<button data-layout-mode="${key}" class="${state.mode===key?'selected':''}">${icon(key)}<span>${name}</span></button>`).join('')}</div>`);}
+let layoutFitRequest=0;
+function layoutFitChoices(){return `<div class="layout-fit-grid">${[['cover','铺满相纸'],['contain','完整保留'],['bottom','底部留白']].map(([fit,label])=>`<button class="template-card ${state.fit===fit?'selected':''}" data-setting="fit" data-value="${fit}" aria-pressed="${state.fit===fit}"><canvas width="240" height="160" aria-hidden="true"></canvas><span>${label}</span></button>`).join('')}</div>`;}
+async function paintLayoutFitChoices(){
+ const grid=$('sheetBody').querySelector('.layout-fit-grid');if(!grid)return;const request=++layoutFitRequest;
+ const photo=active()||{src:'/sample.svg',turn:0,zoom:1,x:0,y:0,filter:'none',overlays:[]};
+ try{await loadPhoto(photo);}catch(e){return;}
+ if(request!==layoutFitRequest||!grid.isConnected||sheetKind!=='layout')return;
+ const original=state,collecting=collectingPhotoFrames,originalPeek=peek,previousFrames=composingFrames;
+ try{
+  collectingPhotoFrames=false;peek=false;
+  for(const button of grid.querySelectorAll('[data-setting="fit"]')){
+   const fit=button.dataset.value,p={...photo,fit};state={...original,fit};
+   if(fit==='bottom'){state.border=p.border||78;state.mode='photo';state.templateId=null;Object.assign(p,{border:state.border,zoom:1,x:0,y:0,templateId:null});}
+   const [w,fullHeight]=logicalSize(),h=state.media===5014?fullHeight/2:fullHeight,canvas=button.querySelector('canvas');
+   canvas.width=Math.round(240*w/Math.max(w,h));canvas.height=Math.round(240*h/Math.max(w,h));
+   const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.scale(canvas.width/w,canvas.height/h);
+   const frames=[];composingFrames=frames;drawPanel(ctx,0,0,w,h,[p]);
+   if(window.LayerEditor){if(state.media===5014){for(const f of frames){ctx.save();ctx.beginPath();ctx.rect(f.x,f.y,f.w,f.h);ctx.clip();ctx.translate(f.x,f.y);LayerEditor.paint(ctx,f.w,f.h,f.p.overlays||[]);ctx.restore();}}else LayerEditor.paint(ctx,w,h,p.overlays||[]);}
+  }
+ }finally{state=original;collectingPhotoFrames=collecting;peek=originalPeek;composingFrames=previousFrames;}
+}
 function openLayout(){
  const border=state.mode==='collage'&&state.collageLayout==='strip'?(state.stripBorder??state.photos[0]?.border??0):state.border;
- let html='';html+=!(['photo','template','collage','polaroid'].includes(state.mode)||state.mode==='calendar'&&state.calendarLayout!=='plain'&&state.media!==5014)?'':`<div class="field"><label>照片如何放进相纸</label>${segments('fit',[['cover','铺满相纸'],['contain','完整保留'],...(['photo','template'].includes(state.mode)?[['bottom','底部留白']]:[])])}</div>`;
+ let html='';html+=!(['photo','template','collage','polaroid'].includes(state.mode)||state.mode==='calendar'&&state.calendarLayout!=='plain'&&state.media!==5014)?'':`<div class="field"><label>照片如何放进相纸</label>${['photo','template'].includes(state.mode)?layoutFitChoices():segments('fit',[['cover','铺满相纸'],['contain','完整保留']])}</div>`;
  if(state.media===5012)html+=`<div class="field"><label>相纸方向 <span>旋转照片不会改变相纸方向</span></label>${segments('orientation',[['auto','自动'],['portrait','竖版'],['landscape','横版']])}</div>`;
  if(['photo','collage'].includes(state.mode))html+=`<div class="field"><label>${state.fit==='bottom'?'底部留白':'白边'} <span id="borderValue">${(border*25.4/300).toFixed(1)} mm</span></label><input type="range" id="borderInput" min="0" max="200" step="1" value="${border}"></div>`;
  if(state.mode==='collage')html+=`<div class="field"><label>照片间距 <span id="gapValue">${(state.gap*25.4/300).toFixed(1)} mm</span></label><input id="gapInput" type="range" min="0" max="80" step="4" value="${state.gap}"></div><p class="hint">最多 6 张照片拼成一张相纸。点击下方缩略图，可单独调整每张照片的位置。</p>`;
@@ -231,7 +252,7 @@ function openLayout(){
  if(state.mode==='id')html+=`<div class="field"><label>证件照尺寸</label>${segments('idSize',[['25x35','一寸 · 25×35'],['35x45','35×45'],['35x49','二寸 · 35×49'],['33x48','大一寸 · 33×48'],['51x51','美签 · 51×51'],['45x45','日签 · 45×45']])}</div><p class="hint">按 300 dpi 实际尺寸排版。换底仅在本机处理。建议使用人物清晰、背景简单的正面照片。</p>`;
  if(state.mode==='label')html+=`<p class="hint">当前相纸共 ${NameLabels.count()} 枚。内容可在“文字”中修改。</p>`;
  html+='<button class="full-button" data-close>完成调整</button>';
- openSheet('layout','排版',html);
+ openSheet('layout','排版',html);paintLayoutFitChoices();
 }
 let filterRequest=0;
 async function openFilters(){
