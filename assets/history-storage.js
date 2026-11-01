@@ -3,7 +3,7 @@
  if(!window.BrowserTransport)return;
  const keep=()=>[...new Set([...state.photos.flatMap(p=>[p.src,p.coatSource]),state.coatSource].filter(v=>typeof v==='string'&&/^\/private\/prints\/[a-f0-9-]+\.jpg$/.test(v)))];
  const previous=openHistory;
- window.openHistory=function(){previous();if(native.host!=='desktop')return;
+ window.openHistory=function(){previous();if(native.host!=='desktop'||native.capabilities?.historyStorage!==true)return;
   $('sheetBody').insertAdjacentHTML('afterbegin','<div class="field" id="historyStorage"><p class="hint" role="status">正在计算可清理空间…</p><button class="full-button secondary-button" disabled>清理历史打印文件</button></div>');
   const row=$('historyStorage'),button=row.querySelector('button'),status=row.querySelector('p');
   BrowserTransport.request('history/storage',{keepFiles:keep()}).then(value=>{if(!row.isConnected)return;status.textContent=`可清理 ${(value.bytes/1048576).toFixed(1)} MB · ${value.files} 个打印文件`;button.disabled=!value.files;}).catch(e=>{if(row.isConnected)status.textContent=e.message;});

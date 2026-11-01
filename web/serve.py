@@ -67,7 +67,7 @@ class Studio:
             if r.path=='/api/state':
                 own=[j for j in self.core.jobs if j['owner']==session['id']];waiting=[j for j in own if j['phase'] in ('queued','printing','uncertain')];job=waiting[0] if waiting else own[-1] if own else {};public=self.core.public(job)
                 if job.get('phase')=='queued' and self.core.paused:public['message']='共享队列已暂停，请在服务端检查'
-                return web.json_response(dict(permission=True,canManageQueue=can_manage,host='desktop',airprintSplice=self.core.airprint_splice,simulation=self.simulate,busy=job.get('phase')=='printing',unresolved=bool(waiting),job=public,history=[self.core.public(j) for j in reversed(own) if j['phase'] not in ('queued','printing')][:20],device=self.core.device,message=public.get('message','电脑共享服务已连接')))
+                return web.json_response(dict(permission=True,canManageQueue=can_manage,host='desktop',capabilities=dict(models=True,historyStorage=True),airprintSplice=self.core.airprint_splice,simulation=self.simulate,busy=job.get('phase')=='printing',unresolved=bool(waiting),job=public,history=[self.core.public(j) for j in reversed(own) if j['phase'] not in ('queued','printing')][:20],device=self.core.device,message=public.get('message','电脑共享服务已连接')))
             if r.path=='/api/sharing':
                 if self.lan and time.monotonic()-self.address_checked>30:
                     def addresses():

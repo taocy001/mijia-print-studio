@@ -12,7 +12,7 @@ with sync_playwright() as runtime:
         result={'runtime':True,'canManage':manage,'models':[{'id':'face','name':'人脸辅助裁切','state':'missing','bytes':0},{'id':'cutout','name':'抠图换底','state':'verified','bytes':0}]}
         def route(r):
             name=urlparse(r.request.url).path
-            if name=='/api/state':r.fulfill(json={'permission':True,'host':'desktop','device':{},'history':[]});return
+            if name=='/api/state':r.fulfill(json={'permission':True,'host':'desktop','capabilities':{'models':True},'device':{},'history':[]});return
             if name=='/api/models':r.fulfill(json=result);return
             if name=='/api/admin/models':
                 posts.append(r.request.post_data_json);result['models'][0].update(state='downloading',bytes=1024);r.fulfill(json={'ok':True},status=202);return
