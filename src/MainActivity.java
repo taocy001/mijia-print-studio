@@ -221,6 +221,7 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void startSharing(){main.post(()->{sharingAirPrint=false;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
         @JavascriptInterface public void startAirPrint(){main.post(()->{sharingAirPrint=true;if(!granted()){requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT,Manifest.permission.BLUETOOTH_SCAN},9);return;}startSharingService();});}
         @JavascriptInterface public void stopAirPrint(){SharingService.stopAirPrint();}
+        @JavascriptInterface public String resetPairing(){return SharingService.resetPairing(MainActivity.this);}
         @JavascriptInterface public void stopSharing(){SharingService.stopSharing();}
         @JavascriptInterface public void resumeSharing(){SharingService.resumeQueue();}
         @JavascriptInterface public boolean landscape(){return getResources().getConfiguration().orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE;}

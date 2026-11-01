@@ -88,14 +88,14 @@ class Models(unittest.IsolatedAsyncioTestCase):
         transport=Mock()
         transport.get_extra_info.side_effect=lambda key:('127.0.0.1',8635) if key=='sockname' else (peer,1234)
         headers={'Host':'127.0.0.1:8635','Origin':origin or 'http://127.0.0.1:8635','X-Forwarded-For':'127.0.0.1'}
-        if paired:headers['Cookie']='liuying=test'
+        if paired:headers['Cookie']='liuying='+('T'*64)
         req=make_mocked_request(method,path,headers=headers,transport=transport)
         req._read_bytes=b'{"id":"test"}'
         return req
 
     async def test_state_advertises_capabilities_without_admin_privilege(self):
         core=SimpleNamespace(data=self.root,simulate=True,jobs=[],public=lambda job:job,airprint_splice=False,device={})
-        studio=Studio(core=core);studio.sessions['test']={'id':'test'}
+        studio=Studio(core=core);studio.pairings.grant('T'*64,'a'*64);studio.sessions['T'*64]={'id':'test'}
         response=await studio.handle(self.request('/api/state',peer='192.168.1.2'))
         value=json.loads(response.text)
         self.assertEqual(value['capabilities'],{'models':True,'historyStorage':True})
@@ -103,7 +103,7 @@ class Models(unittest.IsolatedAsyncioTestCase):
 
     async def test_api_auth_origin_and_host_only_download(self):
         studio=Studio(core=SimpleNamespace(data=self.root,simulate=True));studio.models=self.store
-        studio.sessions['test']={'id':'test'}
+        studio.pairings.grant('T'*64,'a'*64);studio.sessions['T'*64]={'id':'test'}
         response=await studio.handle(self.request('/api/models',paired=False));self.assertEqual(response.status,401)
         response=await studio.handle(self.request('/api/models',peer='192.168.1.2'))
         self.assertFalse(json.loads(response.text)['canManage'])

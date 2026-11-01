@@ -110,14 +110,15 @@ class HistoryStorage(unittest.IsolatedAsyncioTestCase):
     async def test_api_revokes_all_owner_sessions_and_persistent_access(self):
         job,_=await self.job();name='/private/'+job['file']
         studio=Studio(core=self.core)
-        studio.sessions={'a':dict(id='one',files={name}), 'b':dict(id='one',files={name}), 'c':dict(id='two',files={'/private/photos/kept.jpg'})}
+        studio.pairings.grant('a'*64,'1'*64)
+        studio.sessions={'a'*64:dict(id='one',files={name}), 'b':dict(id='one',files={name}), 'c':dict(id='two',files={'/private/photos/kept.jpg'})}
         studio.owners={'one':dict(id='one',files=[name]), 'two':dict(id='two',files=['/private/photos/kept.jpg'])}
         transport=Mock();transport.get_extra_info.side_effect=lambda key:('127.0.0.1',8635) if key=='sockname' else ('192.168.1.10',123)
-        request=make_mocked_request('POST','/api/history/clear',headers={'Host':'127.0.0.1:8635','Origin':'http://127.0.0.1:8635','Cookie':'liuying=a'},transport=transport)
+        request=make_mocked_request('POST','/api/history/clear',headers={'Host':'127.0.0.1:8635','Origin':'http://127.0.0.1:8635','Cookie':'liuying='+('a'*64)},transport=transport)
         request._read_bytes=b'{"confirmed":true,"keepFiles":[]}'
         response=await studio.handle(request)
         self.assertEqual(response.status,200)
-        self.assertEqual(studio.sessions['a']['files'],set());self.assertEqual(studio.sessions['b']['files'],set())
+        self.assertEqual(studio.sessions['a'*64]['files'],set());self.assertEqual(studio.sessions['b']['files'],set())
         stored=json.loads((self.core.data/'web-owners.json').read_text())
         self.assertEqual(stored['one']['files'],[]);self.assertEqual(stored['two']['files'],['/private/photos/kept.jpg'])
 

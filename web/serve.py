@@ -8,6 +8,7 @@ from printing.images import decode,cutout,UserError
 from printing.faces import detect_faces
 from printing.models import ModelStore
 from printing.identity import sharing_name
+from web.pairing import Pairings,LIFETIME
 from printing.service import PrintService,atomic
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -21,10 +22,25 @@ class Studio:
         self.data=self.core.data;self.simulate=self.core.simulate;self.models=ModelStore();self.name=name or sharing_name(self.data)
         try:self.owners=json.loads((self.data/'web-owners.json').read_text())
         except FileNotFoundError:self.owners={}
+        self.pairings=Pairings(self.data)
         self.code=f'{secrets.randbelow(1000000):06}';self.sessions={};self.failures=0;self.blocked_until=0
     def remember(self,session):
         self.owners[session['ownerKey']]={'id':session['id'],'files':sorted(session['files']),'bytes':session['bytes']}
         atomic(self.data/'web-owners.json',self.owners)
+    def restore(self,owner_key):
+        saved=self.owners.get(owner_key,{})
+        session={'id':saved.get('id',str(uuid.uuid4())),'files':set(saved.get('files',[])),'bytes':0,'uploads':0,'ownerKey':owner_key}
+        for job in self.core.jobs:
+            if job['owner']==session['id']:
+                session['files'].update('/private/'+page['file'] for page in job.get('pages',[]) if page.get('file') and not job.get('filesCleared'))
+        return session
+    def session(self,token):
+        grant=self.pairings.find(token)
+        if not grant:return None
+        cached=self.sessions.get(token)
+        if cached is None:
+            cached=self.restore(grant['ownerKey']);self.sessions[token]=cached
+        return cached
     async def start(self,app):
         if self.owns_core:await self.core.start(app)
     async def stop(self,app):
@@ -38,21 +54,20 @@ class Studio:
         if r.path=='/api/pair' and r.method=='POST':
             if (r.content_length or 0)>4096:raise web.HTTPRequestEntityTooLarge(max_size=4096,actual_size=r.content_length)
             code=(await r.post()).get('code','')
-            if time.monotonic()<self.blocked_until or len(self.sessions)>=12 or not code.isascii() or not secrets.compare_digest(code,self.code):
+            owner=r.cookies.get('liuying-owner','')
+            if not re.fullmatch('[A-Za-z0-9_-]{64}',owner):owner=secrets.token_urlsafe(48)
+            owner_key=hashlib.sha256(owner.encode()).hexdigest()
+            if time.monotonic()<self.blocked_until or not self.pairings.available(owner_key) or not code.isascii() or not secrets.compare_digest(code,self.code):
                 self.failures+=1
                 if self.failures>=5:self.blocked_until=time.monotonic()+60;self.failures=0
                 return web.Response(text=self.pair_page('配对码不正确或请求过多，请稍后重试'),content_type='text/html',status=403)
-            self.failures=0;token=secrets.token_urlsafe(48)
-            owner=r.cookies.get('liuying-owner','')
-            if not re.fullmatch('[A-Za-z0-9_-]{64}',owner):owner=secrets.token_urlsafe(48)
-            owner_key=hashlib.sha256(owner.encode()).hexdigest();saved=self.owners.get(owner_key,{})
-            session={'id':saved.get('id',str(uuid.uuid4())),'files':set(saved.get('files',[])),'bytes':0,'uploads':0,'ownerKey':owner_key}
-            for job in self.core.jobs:
-                if job['owner']==session['id']:
-                    session['files'].update('/private/'+page['file'] for page in job.get('pages',[]) if page.get('file') and not job.get('filesCleared'))
-            self.sessions[token]=session;self.remember(session)
-            response=web.HTTPSeeOther('/');response.set_cookie('liuying',token,httponly=True,samesite='Strict');response.set_cookie('liuying-owner',owner,httponly=True,samesite='Strict',max_age=31536000);return response
-        session=self.sessions.get(r.cookies.get('liuying'))
+            token=secrets.token_urlsafe(48);session=next((value for value in self.sessions.values() if value.get('ownerKey')==owner_key),None)
+            if session is None:session=self.restore(owner_key)
+            self.remember(session);self.pairings.grant(token,owner_key)
+            self.sessions={key:value for key,value in self.sessions.items() if self.pairings.find(key)}
+            self.sessions[token]=session;self.failures=0
+            response=web.HTTPSeeOther('/');response.set_cookie('liuying',token,httponly=True,samesite='Strict',max_age=LIFETIME);response.set_cookie('liuying-owner',owner,httponly=True,samesite='Strict',max_age=LIFETIME);return response
+        session=self.session(r.cookies.get('liuying'))
         if not session:
             if r.path=='/' and r.method=='GET':return web.Response(text=self.pair_page('输入服务端显示的配对码'),content_type='text/html')
             return web.json_response({'error':'请重新配对'},status=401)
@@ -78,7 +93,7 @@ class Studio:
                     self.address_checked=time.monotonic()
                 addresses=list(self.address_cache) if self.lan else []
                 if self.lan and not ipaddress.ip_address(address).is_loopback and address not in addresses:addresses.append(address)
-                return web.json_response(dict(running=True,host='desktop',name=self.name,airprintName=self.name,lan=self.lan,airprint=self.airprint,airprintReady=self.airprint and self.core.airprint_ready(),addresses=[f'http://{value}:{port}' for value in addresses],current='http://'+r.host))
+                return web.json_response(dict(running=True,host='desktop',code=self.code,canManagePairing=can_manage,name=self.name,airprintName=self.name,lan=self.lan,airprint=self.airprint,airprintReady=self.airprint and self.core.airprint_ready(),addresses=[f'http://{value}:{port}' for value in addresses],current='http://'+r.host))
             if r.path=='/session.js':return web.Response(text='window.STUDIO_DRAFT_KEY='+json.dumps('liuying-draft-'+session['id'])+';',content_type='application/javascript')
             if r.path.startswith('/private/'):
                 if r.path not in session['files']:raise web.HTTPNotFound()
@@ -97,6 +112,13 @@ class Studio:
         raw=await r.read()
         if len(raw)>(18000000 if r.path=='/api/print' else 4096):raise UserError('请求过大')
         body=json.loads(raw)
+        if r.path=='/api/admin/pairing/reset':
+            token=r.cookies.get('liuying');self.pairings.reset(token)
+            self.sessions={token:session};previous=self.code
+            while self.code==previous:self.code=f'{secrets.randbelow(1000000):06}'
+            self.failures=0;self.blocked_until=0
+            print('配对码：'+self.code,flush=True)
+            return web.json_response({'ok':True})
         if r.path=='/api/admin/models':
             self.models.start(body.get('id'));return web.json_response({'ok':True},status=202)
         if r.path=='/api/print':

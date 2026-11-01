@@ -13,7 +13,7 @@ public final class SharingService extends PrintService {
  private final Handler main=new Handler(Looper.getMainLooper());
  static boolean accepting(){SharingService s=instance;return s!=null&&!s.closing&&s.http!=null;}
  static JSONObject sharingState(){
-  JSONObject out=new JSONObject();try{SharingService s=instance;out.put("running",accepting());if(s==null)return out;out.put("airprintReady",s.ipp!=null&&PrinterStatus.ready(s,s.paused)).put("airprintAdvertised",s.advertisement.visible()).put("airprint",s.ipp!=null).put("airprintName",s.airprintName).put("airprintError",s.airprintError).put("paused",s.paused).put("lan",true);if(s.http==null)return out;out.put("code",s.api.sessions.code);JSONArray addresses=new JSONArray();
+  JSONObject out=new JSONObject();try{SharingService s=instance;out.put("running",accepting()).put("canManagePairing",true);if(s==null)return out;out.put("airprintReady",s.ipp!=null&&PrinterStatus.ready(s,s.paused)).put("airprintAdvertised",s.advertisement.visible()).put("airprint",s.ipp!=null).put("airprintName",s.airprintName).put("airprintError",s.airprintError).put("paused",s.paused).put("lan",true);if(s.http==null)return out;out.put("code",s.api.sessions.code);JSONArray addresses=new JSONArray();
    for(NetworkInterface n:Collections.list(NetworkInterface.getNetworkInterfaces()))if(n.isUp()&&!n.isLoopback())for(InetAddress a:Collections.list(n.getInetAddresses()))if(a instanceof Inet4Address&&a.isSiteLocalAddress())addresses.put("http://"+a.getHostAddress()+":"+s.http.port());out.put("addresses",addresses);
   }catch(Exception ignored){}return out;
  }
@@ -31,7 +31,7 @@ public final class SharingService extends PrintService {
   try{
    if(instance==null){Store.recover(this);PrintJobs.cancelWaiting(this);instance=this;main.post(pump);}
    if("airprint".equals(intent.getAction())){if(ipp==null){ippApi=new PhoneAirPrint(this);ipp=new LocalHttp(true,8637,ippApi,true);airprintName=defaultPrinterName(this);}PrinterStatus.refresh(this,true);syncAdvertisement();}
-   else if(http==null){api=new WebApi(this);http=new LocalHttp(true,8634,api);}
+   else if(http==null){synchronized(SharingService.class){api=new WebApi(this);http=new LocalHttp(true,8634,api);}}
   }catch(Exception e){Store.message="共享服务启动失败，请检查端口或权限";if(http==null&&ipp==null){stopForeground(STOP_FOREGROUND_REMOVE);stopSelf();}}
   return START_NOT_STICKY;
  }
@@ -40,6 +40,7 @@ public final class SharingService extends PrintService {
  static void resumeQueue(){SharingService s=instance;if(s!=null)s.main.post(()->{if(!Store.busy){JSONObject j=Store.read(s,"job.json");if(!j.has("token")||Store.terminal(j)){s.paused=false;s.syncAdvertisement();}}});}
  static void checkPrinter(){SharingService s=instance;if(s!=null)PrinterStatus.refresh(s,true);}
  static void reconcile(String owner)throws Exception{SharingService s=instance;if(s==null)throw new java.io.IOException("共享服务未开启");s.main.post(()->{synchronized(Store.LOCK){JSONObject j=Store.read(s,"job.json");if(!Store.busy&&!s.running&&owner.equals(j.optString("owner"))&&j.has("jobId")&&!Store.terminal(j)){s.running=true;s.execute("reconcile");}}});}
+ static synchronized String resetPairing(Context context){try{SharingService s=instance;WebSessions sessions=s!=null&&s.api!=null?s.api.sessions:new WebSessions(context.getFilesDir());sessions.revokeAll();return "{\"ok\":true}";}catch(Exception e){return "{\"error\":\"配对重置失败，请重试\"}";}}
  static void stopSharing(){SharingService s=instance;if(s!=null)s.main.post(()->{if(s.ipp==null)s.closeSharing();else{if(s.http!=null){s.http.close();s.http=null;}try{PrintJobs.cancelWaiting(s,false);}catch(Exception ignored){}if(s.api!=null)s.api.sessions.clear();}});}
  static void stopAirPrint(){SharingService s=instance;if(s!=null)s.main.post(()->{s.closeAirPrint();try{PrintJobs.cancelWaiting(s,true);}catch(Exception ignored){}if(s.http==null)s.closeSharing();});}
  static String printerUuid(Context c){android.content.SharedPreferences p=c.getSharedPreferences("printer",0);String id=p.getString("uuid",null);if(id==null){id="urn:uuid:"+UUID.randomUUID();p.edit().putString("uuid",id).apply();}return id;}
