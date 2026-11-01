@@ -28,11 +28,11 @@ with sync_playwright() as p:
   page.locator('#noTemplate').click();assert page.evaluate('active().border===0&&state.border===0')
   assert all(color==[35,107,164] for color in edges())
   page.evaluate("closeSheet();active().fit=state.fit='contain';active().border=state.border=78;render()")
-  assert all(color==[255,255,255] for color in edges())
+  assert page.evaluate('photoFrames[0].x===0&&photoFrames[0].y===0')
  page.evaluate("state.media=5014;state.mode='template';state.photos[0].templateId=TEMPLATE_CATALOG[0].id;state.photos[1].templateId=null;state.photos[1].fit='cover';state.active=1;render()")
  assert all(color==[35,107,164] for color in edges())
  page.evaluate("state.media=5012;state.mode='collage';state.border=78;state.photos.forEach(p=>{p.fit='cover';p.border=78;p.templateId=null});state.active=0;render();openLayout()")
  assert page.locator('#borderInput').count()==1 and all(color==[255,255,255] for color in edges())
  assert not errors,errors
  browser.close()
-print('PASS: legacy full bleed, bottom-to-cover, no-template, per-photo margins, splice mixed templates and retained contain/collage margins; no printing')
+print('PASS: legacy full bleed, bottom-to-cover, no-template, per-photo margins, splice mixed templates and borderless contain and retained collage margins; no printing')
