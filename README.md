@@ -95,6 +95,14 @@ $env:MIJIA_BLUETOOTH_ADDRESS = '打印机蓝牙地址'
 
 示例IP和网段需替换为这台电脑的局域网IPv4和可信网段。其他设备访问 `http://电脑IP:8635`，或在系统打印菜单选择此电脑共享的打印机。`--entry web` / `--entry airprint` 可分别启动；六寸拼接设置与Mac相同。
 
+遇到启动问题可运行只读自检，无需连接或打印：
+
+```powershell
+.\build\venv\Scripts\python.exe desktop/windows_check.py
+```
+
+自检区分依赖缺失、适配器不可用、父设备被禁用、目标未配对、端口占用和可选模型缺失；不会更改系统设置。`--json` 可输出结构化结果，端口自定义时传入 `--web-port` / `--ipp-port`。检查通过不代表已验证局域网访问或实际出纸。
+
 Windows防火墙需允许所用Python在专用网络接收TCP 8635/8636及UDP 5353；只在可信局域网开放。保持电脑唤醒和服务进程运行，Ctrl+C停止。数据默认在 `%LOCALAPPDATA%\MijiaPrintStudio`，可用 `--data` 指定其他目录。
 
 PDF使用PDFium完整保留整页；HEIC使用本地解码库。需要人脸检测/抠图时先运行 `python fetch_deps.py` 下载离线模型。安装的依赖保留其附带许可证；不需要安装Bonjour软件。
