@@ -7,17 +7,18 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from printing.images import decode,cutout,UserError
 from printing.faces import detect_faces
 from printing.models import ModelStore
+from printing.identity import sharing_name
 from printing.service import PrintService,atomic
 
 ROOT=Path(__file__).resolve().parents[1]
 HEADERS={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin','X-Frame-Options':'DENY','Content-Security-Policy':"default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; object-src 'none'"}
 
 class Studio:
-    def __init__(self,data=None,simulate=False,address=None,*,core=None,lan=False,airprint=False):
+    def __init__(self,data=None,simulate=False,address=None,*,core=None,lan=False,airprint=False,name=None):
         self.core=core or PrintService(data,simulate,address)
         self.owns_core=core is None
         self.lan=lan;self.airprint=airprint;self.address_cache=[];self.address_checked=0
-        self.data=self.core.data;self.simulate=self.core.simulate;self.models=ModelStore()
+        self.data=self.core.data;self.simulate=self.core.simulate;self.models=ModelStore();self.name=name or sharing_name(self.data)
         try:self.owners=json.loads((self.data/'web-owners.json').read_text())
         except FileNotFoundError:self.owners={}
         self.code=f'{secrets.randbelow(1000000):06}';self.sessions={};self.failures=0;self.blocked_until=0
@@ -77,7 +78,7 @@ class Studio:
                     self.address_checked=time.monotonic()
                 addresses=list(self.address_cache) if self.lan else []
                 if self.lan and not ipaddress.ip_address(address).is_loopback and address not in addresses:addresses.append(address)
-                return web.json_response(dict(running=True,host='desktop',lan=self.lan,airprint=self.airprint,airprintReady=self.airprint and self.core.airprint_ready(),addresses=[f'http://{value}:{port}' for value in addresses],current='http://'+r.host))
+                return web.json_response(dict(running=True,host='desktop',name=self.name,airprintName=self.name,lan=self.lan,airprint=self.airprint,airprintReady=self.airprint and self.core.airprint_ready(),addresses=[f'http://{value}:{port}' for value in addresses],current='http://'+r.host))
             if r.path=='/session.js':return web.Response(text='window.STUDIO_DRAFT_KEY='+json.dumps('liuying-draft-'+session['id'])+';',content_type='application/javascript')
             if r.path.startswith('/private/'):
                 if r.path not in session['files']:raise web.HTTPNotFound()

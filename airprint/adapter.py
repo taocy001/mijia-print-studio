@@ -4,6 +4,7 @@ from pathlib import Path
 from aiohttp import web
 from printing.images import UserError
 from printing.service import atomic
+from printing.identity import sharing_name
 from .capabilities import Capabilities,IppFailure,integer
 from .offline import Attribute as A,Message,Unsupported,decode_ipp,encode_ipp
 
@@ -11,8 +12,9 @@ STATES={'receiving':4,'rendering':4,'queued':3,'printing':5,'uncertain':6,'done'
 TERMINAL=('done','cancelled','aborted','rejected')
 
 class AirPrint(Capabilities):
-    def __init__(self,core,uri,*,paper='auto'):
+    def __init__(self,core,uri,*,paper='auto',name=None):
         self.core,self.uri,self.paper=core,uri,paper
+        self.name=name or sharing_name(core.data)
         if paper=='splice':core.airprint_splice=True
         self.identity='urn:uuid:'+str(uuid.uuid5(uuid.NAMESPACE_URL,uri))
         self.started=time.monotonic();self.gate=asyncio.Lock()

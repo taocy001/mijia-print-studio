@@ -17,8 +17,8 @@ class Capabilities:
     def printer_attributes(self):
         accepting = self.core.airprint_ready()
         busy = any(j.get('phase')=='printing' for j in self.core.jobs)
-        attrs = [A(4,0x42,"printer-name","小米照片打印机 2".encode("utf-8")),
-            A(4,0x41,"printer-info","小米照片打印机 2".encode("utf-8")),
+        attrs = [A(4,0x42,"printer-name",getattr(self,"name","小米照片打印机 2").encode("utf-8")),
+            A(4,0x41,"printer-info",getattr(self,"name","小米照片打印机 2").encode("utf-8")),
             A(4,0x45,"printer-uri-supported",self.uri.encode()),
             A(4,0x45,"printer-uuid",self.identity.encode()),
             A(4,0x44,"uri-security-supported",b"none"),

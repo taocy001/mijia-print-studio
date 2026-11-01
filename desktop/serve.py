@@ -4,15 +4,17 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from aiohttp import web
 from printing.service import PrintService
+from printing.identity import sharing_name
 
 async def run(args, *, stop_event=None, on_ready=None):
     core=PrintService(args.data,args.simulate,os.environ.get('MIJIA_BLUETOOTH_ADDRESS'))
-    runners=[];bonjour=None;signals=[]
-    await core.start(None)
+    runners=[];bonjour=None;signals=[];started=False
     try:
+        display_name=sharing_name(core.data,getattr(args,'printer_name',None))
+        await core.start(None);started=True
         if args.entry in ('web','both'):
             from web.serve import Studio,app
-            studio=Studio(core=core,lan=args.lan,airprint=args.entry=='both');runner=web.AppRunner(app(studio),access_log=None);runners.append(runner)
+            studio=Studio(core=core,lan=args.lan,airprint=args.entry=='both',name=display_name);runner=web.AppRunner(app(studio),access_log=None);runners.append(runner)
             await runner.setup();await web.TCPSite(runner,'0.0.0.0' if args.lan else '127.0.0.1',args.web_port).start()
             print('配对码：'+studio.code,flush=True)
             print(f'Web: http://127.0.0.1:{args.web_port}',flush=True)
@@ -20,17 +22,17 @@ async def run(args, *, stop_event=None, on_ready=None):
             from airprint.adapter import AirPrint,app
             from airprint.capabilities import URF
             from airprint.documents import FORMATS
-            adapter=AirPrint(core,f'ipp://{args.hostname}:{args.ipp_port}/ipp/print',paper=args.paper)
+            adapter=AirPrint(core,f'ipp://{args.hostname}:{args.ipp_port}/ipp/print',paper=args.paper,name=display_name)
             runner=web.AppRunner(app(adapter,args.allow_network),access_log=None);runners.append(runner)
             await runner.setup();await web.TCPSite(runner,'0.0.0.0' if args.lan else '127.0.0.1',args.ipp_port).start()
             print(f'AirPrint: {adapter.uri}',flush=True)
             if args.announce:
                 if sys.platform=='win32':
                     from desktop.windows_bonjour import WindowsBonjour
-                    publisher=WindowsBonjour(adapter,args.printer_name,args.ipp_port,args.address)
+                    publisher=WindowsBonjour(adapter,display_name,args.ipp_port,args.address)
                 else:
                     from desktop.bonjour import Bonjour
-                    publisher=Bonjour(adapter,args.printer_name,args.ipp_port)
+                    publisher=Bonjour(adapter,display_name,args.ipp_port)
                 bonjour=asyncio.create_task(publisher.run())
         if args.simulate:print('模拟模式：不会连接打印机或实际打印。',flush=True)
         stopped=stop_event if stop_event is not None else asyncio.Event();loop=asyncio.get_running_loop()
@@ -49,7 +51,9 @@ async def run(args, *, stop_event=None, on_ready=None):
             except asyncio.CancelledError:pass
             except Exception:logging.getLogger(__name__).warning('AirPrint discovery shutdown failed; continuing cleanup')
         for runner in reversed(runners):await runner.cleanup()
-        await core.stop(None)
+        if started:await core.stop(None)
+        else:
+            for handle in core._locks:handle.close()
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--entry',choices=('web','airprint','both'),default='both');p.add_argument('--simulate',action='store_true');p.add_argument('--lan',action='store_true');p.add_argument('--announce',action='store_true');p.add_argument('--allow-network',action='append',default=[]);p.add_argument('--hostname',default='localhost');p.add_argument('--printer-name',default='Liuying Photo Printer');p.add_argument('--web-port',type=int,default=8635);p.add_argument('--ipp-port',type=int,default=8636);p.add_argument('--paper',choices=('auto','splice'),default='auto');p.add_argument('--data',type=Path,default=Path.home()/'Library/Application Support/LiuyingStudio');args=p.parse_args()

@@ -20,6 +20,7 @@ with sync_playwright() as p:
 
 
  page.locator('#menuBtn').click();page.locator('#sharingMenu').click()
+ assert page.locator('.info-row').filter(has_text='共享服务').inner_text().endswith('Test printer')
  assert page.locator('#stopAirPrint').count()==1
  assert page.locator('#resumeSharing').count()==1
  page.locator('#resumeSharing').click();assert page.evaluate('calls')==['resume']
