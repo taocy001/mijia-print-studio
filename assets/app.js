@@ -174,7 +174,7 @@ function updateStatus(){
  $('dockMeta').textContent=`${PAPER[state.media][0]} · ${state.mode==='collage'?Math.min(6,state.photos.length)+' 张拼成 1 张':state.media===5014?'上下两幅 · 1 张':'单张打印'}`;
  const d=native.device||{},fresh=d.connected&&(Date.now()-d.checkedAt<60000);
  $('deviceText').textContent=native.busy?native.message:fresh?`蓝牙可用${d.alert&&d.alert!=='::0'?' · 设备有告警':d.state==='30'?' · 待机':' · 按需连接'}`:'点击检测打印机';
- const j=displayJob();if(sheetKind==='job'&&$('liveJobMessage'))$('liveJobMessage').textContent=j.message||'暂无任务';$('jobBanner').hidden=!j.token||(!native.busy&&!native.unresolved&&!['rejected','aborted','blocked','uncertain','held'].includes(j.phase));
+ const j=displayJob();window.PrintProcess?.update(j);if(sheetKind==='job'&&$('liveJobMessage'))$('liveJobMessage').textContent=j.message||'暂无任务';$('jobBanner').hidden=!j.token||(!native.busy&&!native.unresolved&&!['rejected','aborted','blocked','uncertain','held'].includes(j.phase));
  if(j.token){$('jobLabel').textContent=j.message||native.message;const indeterminate=j.progress<0&&!['done','cancelled','aborted','rejected','held','uncertain','blocked'].includes(j.phase);$('jobProgress').classList.toggle('indeterminate',indeterminate);$('jobProgress').style.width=indeterminate?'35%':Math.max(0,j.progress||0)+'%';$('jobAction').textContent=native.unresolved?'检查任务':'详情';}
  if(j.phase==='done'&&lastJobPhase&&lastJobPhase!=='done')toast('打印完成，去取你的照片吧。');lastJobPhase=j.phase;showPrintFailure();
 }
@@ -185,14 +185,15 @@ function syncPaper(){
 }
 function poll(){try{const previous=detectedPaper();native=JSON.parse(bridge('state')||'{}');syncPaper();if(previous!==detectedPaper()&&sheetKind==='paper')openPaper();updateStatus();refreshDeviceSheet();window.dispatchEvent(new Event('studio-state'));}catch(e){}}
 function openSheet(kind,title,html){
- window.PaperPreview?.clear();
+ window.PaperPreview?.clear();window.PrintProcess?.clear();
  const samePanel=sheetKind===kind&&!$('sheet').hidden,scroll=samePanel?$('sheetBody').scrollTop:0,sheetScroll=samePanel?$('sheet').scrollTop:0,focused=samePanel&&$('sheetBody').contains(document.activeElement)?document.activeElement:null;
  const focusId=focused?.id,selection=focused&&typeof focused.selectionStart==='number'?[focused.selectionStart,focused.selectionEnd]:null;
  $('sheet').setAttribute('aria-modal','true');$('sheet').dataset.kind=kind;$('settingsBack').hidden=!['device','paper','sharing','coat','workType','history','historyDetail','job'].includes(kind);document.body.classList.remove('layer-editing');$('sheet').classList.remove('layer-sheet','emoji-sheet');sheetKind=kind;$('sheetTitle').textContent=title;$('sheetBody').innerHTML=html;$('sheet').hidden=false;$('scrim').hidden=false;document.body.style.overflow='hidden';icons($('sheet'));$('sheetBody').querySelectorAll('[data-close]').forEach(b=>b.remove());if(window.Drawer)Drawer.open(kind,samePanel);
+ if(kind==='job')window.PrintProcess?.mount($('sheetBody'),displayJob());
  if(focusId&&$(focusId)){try{$(focusId).focus({preventScroll:true});if(selection)$(focusId).setSelectionRange(...selection);}catch(e){}}
  $('sheet').scrollTop=sheetScroll;$('sheetBody').scrollTop=scroll;
 }
-function closeSheet(){window.PaperPreview?.clear();if(window.Drawer)Drawer.reset();document.body.classList.remove('layer-editing');$('sheet').classList.remove('layer-sheet','emoji-sheet');sheetKind='';$('sheet').hidden=true;$('scrim').hidden=true;document.body.style.overflow='';pendingPrint=null;}
+function closeSheet(){window.PaperPreview?.clear();window.PrintProcess?.clear();if(window.Drawer)Drawer.reset();document.body.classList.remove('layer-editing');$('sheet').classList.remove('layer-sheet','emoji-sheet');sheetKind='';$('sheet').hidden=true;$('scrim').hidden=true;document.body.style.overflow='';pendingPrint=null;}
 $('settingsBack').onclick=()=>{if(sheetKind==='paper')openDevice();else if(sheetKind==='historyDetail')openHistory();else $('menuBtn').click();};
 window.goBack=()=>{if(sheetKind){closeSheet();return true;}if(window.LayerEditor&&LayerEditor.selected()){LayerEditor.select(null);return true;}return false;};
 function segments(key,choices){return `<div class="segments">${choices.map(([v,n])=>`<button data-setting="${key}" data-value="${v}" class="${String(state[key])===String(v)?'selected':''}">${n}</button>`).join('')}</div>`;}
