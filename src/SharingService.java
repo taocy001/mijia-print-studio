@@ -45,7 +45,7 @@ public final class SharingService extends PrintService {
  static void stopAirPrint(){SharingService s=instance;if(s!=null)s.main.post(()->{s.closeAirPrint();try{PrintJobs.cancelWaiting(s,true);}catch(Exception ignored){}if(s.http==null)s.closeSharing();});}
  static String printerUuid(Context c){android.content.SharedPreferences p=c.getSharedPreferences("printer",0);String id=p.getString("uuid",null);if(id==null){id="urn:uuid:"+UUID.randomUUID();p.edit().putString("uuid",id).apply();}return id;}
  static String printerName(Context c){SharingService s=instance;return s!=null&&s.ipp!=null?s.airprintName:defaultPrinterName(c);}
- private static String defaultPrinterName(Context c){return "留影工坊 · 手机 · " + printerUuid(c).substring(9,15).toUpperCase(Locale.ROOT);}
+ private static String defaultPrinterName(Context c){String name=c.getSharedPreferences("printer",0).getString("display_name","留影工坊 · 手机").trim();if(name.isEmpty())name="留影工坊 · 手机";return name+" · "+printerUuid(c).substring(9,15).toUpperCase(Locale.ROOT);}
  static boolean queuePaused(){SharingService s=instance;return s!=null&&s.paused;}
  static void refreshAdvertisement(){SharingService s=instance;if(s!=null)s.main.post(s::syncAdvertisement);}
  private void syncAdvertisement(){
