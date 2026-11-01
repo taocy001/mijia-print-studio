@@ -69,7 +69,8 @@ public final class MainActivity extends Activity {
                 if(textFileCallback!=null){callback.onReceiveValue(null);return true;}
                 textFileCallback=callback;
                 Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
-                intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"text/plain","text/csv","application/csv","application/json"});intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,false);
+                boolean json=false;for(String accept:params.getAcceptTypes())if(accept.contains("json"))json=true;
+                intent.putExtra(Intent.EXTRA_MIME_TYPES,json?new String[]{"application/json","text/json"}:new String[]{"text/*","application/csv"});intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,false);
                 try{startActivityForResult(intent,12);}catch(ActivityNotFoundException e){textFileCallback=null;callback.onReceiveValue(null);event("toast","无法打开文件选择器");}
                 return true;
             }
