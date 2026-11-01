@@ -102,7 +102,7 @@ public class PrintService extends Service {
         JSONObject before=printer.job(id);job.put("lastInfo",before);Store.write(this,"job.json",job);
         if(before.optInt("job-state",-1)!=1||before.optInt("transfer-size",-1)!=0)throw new IOException("打印任务不是待接收状态");
         printer.upload(id,data,p->update("uploading","正在传送照片"+(coat==null?"":"与覆膜")+" · "+p+"%",p));
-        update("printing","传输完成，等待打印机确认…",100);monitor(printer);
+        update("printing","照片已发送，等待打印机完成",-1);monitor(printer);
     }
     static String transferFailure(JSONObject info){
         long expected=info.optLong("file-size",-1),received=info.optLong("transfer-size",-1);
@@ -117,12 +117,14 @@ public class PrintService extends Service {
         for(int n=0;n<150;n++){
             if(Store.cancel){stopBatch=true;printer.rpc("cancel-job",new JSONObject().put("job-id",id));Store.cancel=false;}
             JSONObject info=printer.job(id);job.put("lastInfo",info);
+            JSONObject snapshot=new JSONObject();for(String key:new String[]{"job-state","job-sub-state","transfer-size","file-size","print-time","printing-page-number"}){Object value=info.opt(key);if(value instanceof Number)snapshot.put(key,value);}
+            job.put("telemetry",new JSONObject().put("stage","waiting").put("sampleAt",System.currentTimeMillis()).put("device",snapshot));
             int state=info.optInt("job-state",-1);
             if(state==9){update("done","打印完成，留住这一刻。",100);Store.archive(this,job);return;}
             if(state==7||state==8){update(state==8?"cancelled":"aborted",state==8?"任务已取消":transferFailure(info).isEmpty()?printerFailure(printer,"打印机已中止任务"):transferFailure(info),0);Store.archive(this,job);return;}
-            if(state==5){Store.device=printer.status();update("held","打印暂停 · "+printerFailure(printer,"请检查相纸、色带或卡纸"),100);return;}
+            if(state==5){Store.device=printer.status();update("held","打印暂停 · "+printerFailure(printer,"请检查相纸、色带或卡纸"),-1);return;}
             if(state<0)throw new IOException("无法识别任务状态");
-            update("printing",state==1?"已传送，等待打印机确认数据…":"正在打印 · 请勿抽拉相纸",100);Thread.sleep(2000);
+            update("printing",state==1?"已传送，等待打印机确认数据…":"正在打印 · 请勿抽拉相纸",-1);Thread.sleep(2000);
         }
         throw new IOException("等待打印结果超时");
     }

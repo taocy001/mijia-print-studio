@@ -115,7 +115,7 @@ class PrintService:
             if job['phase']!='queued':continue
             async with self.io_lock:
                 if job['phase']!='queued':continue
-                job.update(phase='printing',message='正在打印',progress=0,mayHavePrinted=False);self.save();self._active_job=job;self._batch_verified=False
+                job.update(phase='printing',message='正在连接打印机',progress=0,mayHavePrinted=False);self.save();self._active_job=job;self._batch_verified=False
                 try:
                     if self.simulate:await asyncio.sleep(.05);phase='done'
                     else:phase=await self._device_call(self.send,job)
@@ -140,7 +140,7 @@ class PrintService:
             for index,page in enumerate(job['pages']):
                 if cancel.is_set():confirmed=True;return 'cancelled'
                 job.update(batchIndex=index+1,currentPage=index,mayHavePrinted=False)
-                for key in ('jobId','terminalInfo','terminalMessage'):job.pop(key,None)
+                for key in ('jobId','terminalInfo','terminalMessage','telemetry'):job.pop(key,None)
                 page['phase']='prepared';self.save()
                 files=[(self.data/page['file']).read_bytes()]
                 if page.get('ocFile'):files.insert(0,(self.data/page['ocFile']).read_bytes())
@@ -150,7 +150,14 @@ class PrintService:
                     if 'info' in record:page['terminalInfo']=record['info'];job['terminalInfo']=record['info']
                     if record.get('message'):job['terminalMessage']=record['message']
                     job['completedPages']=sum(p.get('phase')=='done' for p in job['pages']);self.save()
-                try:ok=printer.print_photo(files,copies=page['copies'],sharpen=page['sharpen'],media_size=page['media'],log=lambda _:None,on_cancel=cancel.is_set,on_state=progress)
+                def telemetry(record):
+                    job['telemetry']={**job.get('telemetry',{}),**record}
+                    if record.get('stage')=='transfer':
+                        job['progress']=min(100,record['sentBytes']*100//max(1,record['totalBytes']))
+                        job['message']=f"正在发送照片 · {job['progress']}%"
+                    else:job.update(progress=-1,message='照片已发送，等待打印机完成')
+                    self.save()
+                try:ok=printer.print_photo(files,copies=page['copies'],sharpen=page['sharpen'],media_size=page['media'],log=lambda _:None,on_cancel=cancel.is_set,on_state=progress,on_progress=telemetry)
                 except Exception:
                     job['mayHavePrinted']=printer.intent.exists() or page.get('phase')=='uploading'
                     self.save();raise
@@ -189,7 +196,11 @@ class PrintService:
                 self._unavailable()
                 raise UserError(self.device['error']) from error
     def public(self,job):
-        result={k:v for k,v in job.items() if k in ('token','phase','message','progress','file','media','copies','title','orientation','createdAt','batchCount','batchIndex','jobId','completedPages','terminalInfo')}
+        result={k:v for k,v in job.items() if k in ('token','phase','message','progress','file','media','copies','title','orientation','createdAt','batchCount','batchIndex','jobId','completedPages','terminalInfo','telemetry')}
+        index=job.get('currentPage',0)
+        pages=job.get('pages',[])
+        if type(index) is int and 0<=index<len(pages):
+            result['previewPage']={k:pages[index][k] for k in ('file','media','orientation') if k in pages[index]}
         result['canReprint']=job.get('phase')=='done' and bool(job.get('pages'))
         if result['canReprint']:result['reprintPages']=[{k:p[k] for k in ('copies','media') if k in p} for p in job['pages']]
         return result

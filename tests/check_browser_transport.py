@@ -19,7 +19,7 @@ with sync_playwright() as p:
   else:r.fulfill(status=404,body='Missing')
  page.route('https://studio.test/**',route);page.goto('https://studio.test/');page.wait_for_function('window.BrowserTransport&&window.TemplateStudio');page.evaluate('LayerEditor.ready');page.locator('#sampleBtn').click();page.wait_for_function('state.photos.length===1');page.evaluate('BrowserTransport.refresh()');page.evaluate('CropEditor.render()')
  frame=page.locator('#preview').bounding_box();work=page.locator('.workspace').bounding_box();assert frame['y']+frame['height']<=work['y']+work['height']+1,(frame,work)
- page.locator('#printBtn').click();page.locator('#confirmSend').click();page.wait_for_function("!document.querySelector('#confirmSend').disabled");page.locator('#confirmSend').click();page.wait_for_function("sheetKind!=='confirm'")
+ page.locator('#printBtn').click();page.locator('#confirmSend').click();page.wait_for_function("!document.querySelector('#confirmSend').disabled");page.locator('#failureAcknowledge').click();page.locator('#confirmSend').click();page.wait_for_function("sheetKind!=='confirm'")
  assert len(requests)==2 and requests[0]['requestId']==requests[1]['requestId']
  assert requests[0]['pages']==requests[1]['pages'] and 'preview' not in requests[0]['pages'][0]
  assert not errors,errors

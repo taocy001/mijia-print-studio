@@ -32,6 +32,30 @@ class Queue(unittest.IsolatedAsyncioTestCase):
             if self.job['phase'] not in ('queued','printing'):return
             await asyncio.sleep(.01)
         self.fail('worker stuck')
+    async def test_progress_cannot_clear_unresolved_print_intent(self):
+        def disconnected(*args, **kwargs):
+            kwargs['on_state']({'phase':'creating'})
+            self.printer.intent.write_text('{"job":1}')
+            kwargs['on_state']({'phase':'uploading','job':1})
+            kwargs['on_progress']({'stage':'transfer','sentBytes':80,'totalBytes':100,'sampleAt':1})
+            self.assertEqual(self.job['progress'],80)
+            kwargs['on_progress']({'stage':'waiting','device':{'job-state':2,'job-sub-state':4321},'sampleAt':2})
+            self.assertTrue(self.job['mayHavePrinted'])
+            self.assertEqual(self.job['phase'],'printing')
+            self.assertEqual(self.job['progress'],-1)
+            raise OSError('connection lost after upload')
+        with patch.object(self.printer,'print_photo',side_effect=disconnected) as send:
+            await self.run_job()
+        self.assertEqual(send.call_count,1)
+        self.assertEqual(self.job['phase'],'uncertain');self.assertTrue(self.core.paused)
+        self.assertEqual(self.core.public(self.job)['telemetry']['device']['job-sub-state'],4321)
+        self.assertTrue(self.printer.intent.exists())
+
+    async def test_current_page_preview_uses_submitted_page(self):
+        self.job['pages'][1].update(file='second.jpg',orientation='landscape',media=5014)
+        self.job['currentPage']=1
+        self.assertEqual(self.core.public(self.job)['previewPage'],{'file':'second.jpg','orientation':'landscape','media':5014})
+
     async def test_preflight_failure_does_not_pause(self):
         with patch.object(self.printer,'get_prop',side_effect=OSError('offline')):await self.run_job()
         self.assertEqual(self.job['phase'],'rejected');self.assertFalse(self.core.paused);self.assertEqual(self.printer.calls,0)
@@ -102,14 +126,14 @@ class Browser(unittest.IsolatedAsyncioTestCase):
         await self.start_server();owner=await self.pair();session=next(iter(self.studio.sessions.values()))
         (self.studio.data/'photos').mkdir();(self.studio.data/'photos/test.jpg').write_bytes(b'photo')
         session['files'].add('/private/photos/test.jpg');self.studio.remember(session)
-        self.studio.core.jobs.append(dict(owner=session['id'],token='old',phase='rejected',file='photos/test.jpg',pages=[]));self.studio.core.save()
+        self.studio.core.jobs.append(dict(owner=session['id'],token='old',phase='rejected',file='photos/test.jpg',pages=[{'file':'photos/test.jpg','media':5009}]));self.studio.core.save()
         await self.client.close();await self.start_server()
         try:
             r=await self.client.get('/api/state',headers={'Cookie':'liuying-owner='+owner});self.assertEqual(r.status,401)
             await self.pair(owner)
             r=await self.client.get('/api/state');state=await r.json();self.assertEqual(state['history'][0]['phase'],'rejected');self.assertTrue(state['canManageQueue'])
             r=await self.client.get('/private/photos/test.jpg');self.assertEqual(r.status,200)
-            r=await self.client.get('/api/admin/queue');self.assertNotIn('file',(await r.json())['jobs'][0])
+            r=await self.client.get('/api/admin/queue');public=(await r.json())['jobs'][0];self.assertNotIn('file',public);self.assertNotIn('previewPage',public)
             from types import SimpleNamespace
             with patch('web.serve.ipaddress.ip_address',return_value=SimpleNamespace(is_loopback=False)):
                 r=await self.client.get('/api/admin/queue',headers={'X-Forwarded-For':'127.0.0.1'});self.assertEqual(r.status,403)

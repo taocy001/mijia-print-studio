@@ -85,7 +85,7 @@ final class PrintJobs {
   }
  }
  private static JSONObject publicDevice()throws Exception{JSONObject out=new JSONObject();for(String key:new String[]{"connected","released","name","state","alert","media","ribbon","checkedAt"})if(Store.device.has(key))out.put(key,Store.device.get(key));return out;}
- private static JSONObject publicJob(JSONObject job)throws Exception{JSONObject out=new JSONObject();for(String key:new String[]{"token","phase","message","progress","file","title","media","orientation","createdAt","copies","batchIndex","batchCount","jobId"})if(job.has(key))out.put(key,job.get(key));return out;}
+ private static JSONObject publicJob(JSONObject job)throws Exception{JSONObject out=new JSONObject();for(String key:new String[]{"token","phase","message","progress","file","title","media","orientation","createdAt","copies","batchIndex","batchCount","jobId","telemetry"})if(job.has(key))out.put(key,job.get(key));return out;}
  static void cancelWaiting(Context c)throws Exception{cancelWaiting(c,null);}
  static void cancelWaiting(Context c,Boolean airprint)throws Exception{synchronized(Store.LOCK){JSONArray all=records(c);for(int i=0;i<all.length();i++){JSONObject r=all.getJSONObject(i);if("queued".equals(r.optString("phase"))&&(airprint==null||r.optString("owner").startsWith("ipp-")==airprint)){r.put("phase","cancelled").put("message","共享已停止，尚未打印的任务已取消").put("completedAt",System.currentTimeMillis());Store.archive(c,r);}}persist(c,all);}}
  static void cancel(Context c,String owner)throws Exception{
