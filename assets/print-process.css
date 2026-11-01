@@ -1,0 +1,4 @@
+.print-process{margin:0 0 16px;display:grid;justify-items:center;gap:8px}
+.print-process canvas{display:block;width:100%;height:clamp(80px,calc(var(--drawer-height,70dvh) - 240px),280px);object-fit:contain;background:#17181a;border-radius:12px}
+.print-process figcaption{font-size:13px;color:inherit;text-align:center}
+.print-process small{font-size:11px;color:var(--muted,#92939a);text-align:center}
