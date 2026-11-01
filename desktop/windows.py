@@ -8,7 +8,6 @@ from pathlib import Path
 import socket
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from desktop.serve import run
 
 
 def arguments(argv=None):
@@ -61,7 +60,10 @@ def arguments(argv=None):
 def main():
     args = arguments()
     try:
-        asyncio.run(run(args))
+        from desktop.windows_runtime import lease
+        with lease():
+            from desktop.serve import run
+            asyncio.run(run(args))
     except KeyboardInterrupt:
         pass
 
