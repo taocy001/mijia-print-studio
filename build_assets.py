@@ -32,8 +32,9 @@ class EntryAssets(HTMLParser):
         attrs = dict(attrs)
         if tag == 'script' and 'src' in attrs:
             self.paths.add(local_path(attrs['src']))
-        if tag == 'link' and attrs.get('rel') == 'stylesheet':
-            self.paths.add(local_path(attrs.get('href')))
+        if tag == 'link' and attrs.get('rel') in ('stylesheet', 'icon', 'apple-touch-icon'):
+            href=attrs.get('href')
+            self.paths.add(local_path(href[1:] if isinstance(href,str) and href.startswith('/') and not href.startswith('//') else href))
 
 
 def declared_assets(root):

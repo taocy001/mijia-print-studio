@@ -14,7 +14,10 @@ public final class WebSessionsInstrument extends Instrumentation {
  @Override public void onCreate(Bundle args){super.onCreate(args);start();}
  @Override public void onStart(){Bundle result=new Bundle();File dir=new File(getTargetContext().getCacheDir(),"web-session-test-"+System.nanoTime());dir.mkdirs();Context ctx=new ContextWrapper(getTargetContext()){@Override public File getFilesDir(){return dir;}};
   try{
-   WebApi api=new WebApi(ctx);String alice=pair(api,null);WebSessions.Session session=api.sessions.find(alice);String id=session.id;
+   WebApi api=new WebApi(ctx);
+   for(String icon:new String[]{"/apple-touch-icon.png","/favicon.png"}){LocalHttp.Response image=call(api,"GET",icon,null,"");check(image.status==200&&image.body.length>100,"Public PNG icon");check(call(api,"POST",icon,null,"").status==401,"Icon POST stays private");}
+   check(call(api,"GET","/app.js",null,"").status==401,"Editor still requires pairing");
+   String alice=pair(api,null);WebSessions.Session session=api.sessions.find(alice);String id=session.id;
    File photo=new File(dir,"photos/a.jpg"),printed=new File(dir,"prints/a.jpg");photo.getParentFile().mkdirs();printed.getParentFile().mkdirs();Files.write(photo.toPath(),new byte[]{1,2,3});Files.write(printed.toPath(),new byte[]{4,5,6});session.files.add("/private/photos/a.jpg");api.sessions.remember(session);
    Store.write(ctx,"history.json",new JSONObject().put("items",new JSONArray().put(new JSONObject().put("owner",id).put("token","past").put("phase","aborted").put("file","prints/a.jpg"))));
    Store.write(ctx,"web-queue.json",new JSONObject().put("items",new JSONArray().put(new JSONObject().put("owner",id).put("token","held").put("phase","uncertain"))));String queue=PrintJobs.records(ctx).toString();
