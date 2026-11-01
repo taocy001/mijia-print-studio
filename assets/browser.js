@@ -9,7 +9,7 @@
  function pick(limit,texture=false){const input=document.createElement('input');input.type='file';input.accept='image/*';input.multiple=!texture&&limit>1;input.onchange=async()=>{if(input.files.length>limit){emit('toast','本次最多选择 '+limit+' 张照片');return;}emit('loading',true);const items=[];try{for(const file of input.files){if(file.size>25*1024*1024)throw Error('单张照片不能超过 25 MB');items.push(await request('upload',file,true));}}catch(e){emit('toast',e.message);}finally{emit(texture?'texture':'photos',items);emit('loading',false);}};input.click();}
  const captureKey=()=> (window.STUDIO_DRAFT_KEY||'liuying-draft')+'-capture-result';let captureResult=null,capturePicking=false;
  try{captureResult=JSON.parse(localStorage.getItem(captureKey())||'null');}catch{}
- async function captureReady(){const result=captureResult;if(!result)return;try{if(result.photos.length)await emit('photos',result.photos);}finally{await emit('captureFinished',result.finished);}}
+ async function captureReady(){const result=captureResult;if(!result)return capturePicking;try{if(result.photos.length)await emit('photos',result.photos);}finally{await emit('captureFinished',result.finished);}return true;}
  function captureAck(id){if(captureResult?.finished.id!==id)return JSON.stringify({ok:true});try{localStorage.removeItem(captureKey());}catch{return JSON.stringify({error:'拍摄记录确认失败，可稍后恢复'});}captureResult=null;return JSON.stringify({ok:true});}
  function capture(limit){
   if(limit<1)return JSON.stringify({error:'最多保留 6 张照片'});

@@ -21,7 +21,7 @@ with sync_playwright() as runtime:
             if file.is_file():r.fulfill(body=file.read_bytes(),content_type=mimetypes.guess_type(str(file))[0] or 'application/octet-stream')
             else:r.fulfill(status=404,body='Missing')
         page.route('**/*',route);page.goto('https://studio.test/')
-        page.wait_for_function("native.host==='desktop'");page.locator('#menuBtn').click();page.locator('#modelsMenu').click()
+        page.wait_for_function("native.host==='desktop'");page.locator('#menuBtn').click();assert page.locator('#modelsMenu').count()==0;page.evaluate("state.mode='id';openLayout()");page.locator('#modelsMenu').click()
         page.get_by_text('未下载',exact=True).wait_for();assert page.locator('#settingsBack').is_visible()
         button=page.locator('#model-face button')
         if manage:
@@ -40,7 +40,7 @@ with sync_playwright() as runtime:
             assert page.get_by_text('下载或重试请在提供服务的电脑本机打开网页').is_visible()
         result['runtime']=False
         page.get_by_text('推理运行库不可用，请在电脑上重新安装项目依赖').wait_for()
-        page.locator('#settingsBack').click();assert page.evaluate("sheetKind==='menu'")
+        page.locator('#settingsBack').click();assert page.evaluate("sheetKind==='layout'")
         assert page.evaluate('document.documentElement.scrollWidth<=innerWidth')
         assert not errors,errors;page.close()
     # Native app: no desktop-only entry, requests, or replacement UI.

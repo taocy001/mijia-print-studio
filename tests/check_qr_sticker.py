@@ -1,4 +1,4 @@
-"""Decode final JPEGs with macOS Vision; no target URL is visited or printed."""
+"""Legacy QR layers remain readable; no new menu entry or network access."""
 import mimetypes
 import base64
 import json
@@ -45,11 +45,8 @@ with sync_playwright() as runtime:
     assert tear
     assert guard,'Small strips must not export unreadable codes'
     page.evaluate("state={...defaults,media:5009,photos:[{src:'/sample.svg',overlays:[]}],active:0};render();")
-    page.locator('#menuBtn').click();page.locator('#addQr').click()
-    assert page.locator('#settingsBack').is_visible()
-    page.screenshot(path='/tmp/qr-editor-mobile.png')
-    page.locator('#qrUrl').fill(links[0]);page.locator('#applyQr').click()
-    assert page.evaluate("active().overlays.length===1&&LayerEditor.selected().kind==='qr'")
+    page.locator('#menuBtn').click();assert page.locator('#addQr').count()==0
+    page.evaluate("url=>{closeSheet();LayerEditor.create({kind:'qr',text:url,sizePct:28,fx:.5,fy:.5,angle:0,hidden:false});}",links[0])
     page.locator('#copyLayer').click();assert page.evaluate('active().overlays.length===2')
     page.locator('#editLayer').click();page.locator('#qrUrl').fill(links[1]);page.locator('#applyQr').click()
     assert page.evaluate('(url)=>active().overlays[0].text!==url&&active().overlays[1].text===url',links[1])

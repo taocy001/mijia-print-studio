@@ -18,13 +18,13 @@ with sync_playwright() as runtime:
     page.evaluate('Studio.state=()=>JSON.stringify(native)')
     for value in [None,{}, {'models':False,'historyStorage':False}, {'models':'true','historyStorage':'true'}]:
         page.evaluate('(value)=>native.capabilities=value',value)
-        page.locator('#menuBtn').click();assert page.locator('#modelsMenu').count()==0
-        page.locator('#menuHistory').click();assert page.locator('#historyStorage').count()==0
+        page.evaluate("state.mode='id';openLayout()");assert page.locator('#modelsMenu').count()==0
+        page.locator('#menuBtn').click();page.locator('#menuHistory').click();assert page.locator('#historyStorage').count()==0
         page.evaluate('closeSheet()')
     assert not calls,calls
-    page.evaluate("native.capabilities={models:true};document.getElementById('menuBtn').click()")
+    page.evaluate("native.capabilities={models:true};state.mode='id';openLayout()")
     assert page.locator('#modelsMenu').count()==1
-    page.locator('#menuHistory').click();assert page.locator('#historyStorage').count()==0
+    page.locator('#menuBtn').click();page.locator('#menuHistory').click();assert page.locator('#historyStorage').count()==0
     page.evaluate("closeSheet();native.capabilities={historyStorage:true};document.getElementById('menuBtn').click()")
     assert page.locator('#modelsMenu').count()==0
     page.locator('#menuHistory').click();assert page.locator('#historyStorage').count()==1
