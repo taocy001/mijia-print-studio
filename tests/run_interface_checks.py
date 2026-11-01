@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 root=Path(__file__).resolve().parents[1]
-checks=['job_notifications','print_progress','print_process','detected_paper',
+checks=['failure_guidance','job_notifications','print_progress','print_process','detected_paper',
         'browser_settings','host_queue','dock_layout','ui_parity',
         'editor_isolation','selection_position','crop_frame_drag']
 failed=[]
