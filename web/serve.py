@@ -51,6 +51,8 @@ class Studio:
         address,port=r.transport.get_extra_info('sockname')[:2];allowed={f'{address}:{port}'}
         if address=='127.0.0.1':allowed.add(f'localhost:{port}')
         if r.host not in allowed or r.method=='POST' and r.headers.get('Origin')!='http://'+r.host:raise web.HTTPForbidden()
+        if r.method=='GET' and r.path in ('/apple-touch-icon.png','/favicon.png'):
+            return web.FileResponse(ROOT/'assets'/r.path[1:])
         if r.path=='/api/pair' and r.method=='POST':
             if (r.content_length or 0)>4096:raise web.HTTPRequestEntityTooLarge(max_size=4096,actual_size=r.content_length)
             code=(await r.post()).get('code','')
@@ -150,7 +152,7 @@ class Studio:
         if r.path=='/api/cancel':return web.json_response(await self.core.cancel(session))
         if r.path=='/api/reconcile':return web.json_response(await self.core.reconcile(session))
         raise web.HTTPNotFound()
-    def pair_page(self,message):return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>留影工坊</title><style>:root{{color-scheme:light dark;font:16px system-ui}}body{{max-width:360px;margin:18vh auto;padding:24px}}input,button{{box-sizing:border-box;width:100%;padding:16px;margin:12px 0;border-radius:12px;font:inherit}}button{{background:#d5ba76;color:#222;border:0}}</style><h1>留影工坊</h1><p>{message}</p><form method="post" action="/api/pair"><input name="code" inputmode="numeric" pattern="[0-9]{{6}}" maxlength="6" required placeholder="6 位配对码"><button>连接</button></form></html>'''
+    def pair_page(self,message):return f'''<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>留影工坊</title><link rel="icon" type="image/png" sizes="32x32" href="/favicon.png"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><style>:root{{color-scheme:light dark;font:16px system-ui}}body{{max-width:360px;margin:18vh auto;padding:24px}}input,button{{box-sizing:border-box;width:100%;padding:16px;margin:12px 0;border-radius:12px;font:inherit}}button{{background:#d5ba76;color:#222;border:0}}</style><h1>留影工坊</h1><p>{message}</p><form method="post" action="/api/pair"><input name="code" inputmode="numeric" pattern="[0-9]{{6}}" maxlength="6" required placeholder="6 位配对码"><button>连接</button></form></html>'''
 
 @web.middleware
 async def responses(request,handler):

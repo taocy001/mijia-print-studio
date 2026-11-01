@@ -25,6 +25,20 @@ class Pairing(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(r.status,303)
         cookie=r.cookies['liuying'];self.assertEqual(cookie['max-age'],str(LIFETIME));self.assertTrue(cookie['httponly']);self.assertEqual(cookie['samesite'],'Strict');self.assertEqual(cookie['path'],'/')
         return cookie.value,r.cookies['liuying-owner'].value
+    async def test_icons_are_public_but_editor_and_private_files_are_not(self):
+        from PIL import Image
+        import io
+        page=await (await self.client.get('/')).text()
+        for name,size in [('apple-touch-icon.png',180),('favicon.png',32)]:
+            self.assertIn('/'+name,page)
+            r=await self.client.get('/'+name)
+            self.assertEqual(r.status,200);self.assertEqual(r.content_type,'image/png')
+            image=Image.open(io.BytesIO(await r.read())).convert('RGBA')
+            self.assertEqual(image.size,(size,size));self.assertEqual(image.getchannel('A').getextrema(),(255,255))
+            self.assertEqual((await self.client.post('/'+name,headers=self.headers())).status,401)
+        for path in ['/app.js','/api/sharing','/private/example.jpg','/icons/../app.js']:
+            self.assertEqual((await self.client.get(path)).status,401)
+
     async def test_restart_keeps_grants_files_and_separate_identities(self):
         a,b=await self.pair(),await self.pair();sa=self.studio.session(a[0]);sb=self.studio.session(b[0])
         self.assertNotEqual(sa['id'],sb['id']);identity=sa['id']
