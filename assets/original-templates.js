@@ -1,8 +1,9 @@
 /* Original canvas illustrations, with an unobstructed photographic window. */
 window.OriginalTemplates=(()=>{
  const colors=new Map();
- const designs=[['air','风的来信'],['glow','灯火可亲'],['linen','针脚日常'],['tide','海风经过'],['botanical','山野采集'],['gallery','生活展览室'],['film','散场以后'],['sunset','落日公路'],['arch','晴日小院'],['postcard','远方来信'],['petal','花开有时'],['constellation','一起看星星'],['ripple','一池春水'],['ribbon','把此刻打包'],['terrace','街角漫游'],['confetti','快乐收藏夹'],['orchard','橘子晴天'],['alpine','去山里吧'],['cafe','下午三点'],['festival','今夜有庆典'],...KidsTemplates.designs];
+ const designs=[['air','风的来信'],['glow','灯火可亲'],['linen','针脚日常'],['tide','海风经过'],['botanical','山野采集'],['gallery','生活展览室'],['film','散场以后'],['sunset','落日公路'],['arch','晴日小院'],['postcard','远方来信'],['petal','花开有时'],['constellation','一起看星星'],['ripple','一池春水'],['ribbon','把此刻打包'],['terrace','街角漫游'],['confetti','快乐收藏夹'],['orchard','橘子晴天'],['alpine','去山里吧'],['cafe','下午三点'],['festival','今夜有庆典'],...KidsTemplates.designs,...BlendedTemplates.designs];
  function shape(w,h,kind){
+  if(BlendedTemplates.has(kind))return BlendedTemplates.shape(w,h);
   const u=Math.min(w,h),left=Math.round(u*(kind==='film'?.07:.065)),top=Math.round(u*.06),bottom=Math.round(u*.215);
   return {width:w,height:h,crop:{width:w-left*2,height:h-top-bottom},margin:{left,top}};
  }
@@ -215,6 +216,7 @@ window.OriginalTemplates=(()=>{
  }
 
  function paint(ctx,p,x,y,w,h,e){
+  if(BlendedTemplates.has(e.style))return BlendedTemplates.paint(ctx,p,x,y,w,h,e);
   const rgb=palette(p),mix=(white,a)=>`rgb(${rgb.map(v=>Math.round(v*a+white*(1-a))).join(',')})`,sx=w/e.width,sy=h/e.height,u=Math.min(w,h),style=e.style;
   const backgrounds={glow:'#273747',linen:'#eee1cd',tide:'#dce9e5',botanical:'#e2e8d5',gallery:'#f2e7d8',film:'#242b30',sunset:'#f0cbb5',arch:'#e6d6c1',postcard:'#eee4cf',petal:'#f3dfdc',constellation:'#172c46',ripple:'#e1e9df',ribbon:'#eadadf',terrace:'#e4d8c6',confetti:'#f5e5b7',orchard:'#f4e7c7',alpine:'#dde8e5',cafe:'#e9ddca',festival:'#30304b'};
   ctx.save();ctx.translate(x,y);ctx.fillStyle=KidsTemplates.backgrounds[style]||backgrounds[style]||mix(250,.15);ctx.fillRect(0,0,w,h);
@@ -245,7 +247,7 @@ window.OriginalTemplates=(()=>{
  function variant(base,w,h){return {...base,...shape(w,h,base.style)};}
  return {catalog,paint,variant};
 })();
-TEMPLATE_CATALOG.unshift(...OriginalTemplates.catalog.filter(t=>t.style.startsWith('kids-')),...OriginalTemplates.catalog.filter(t=>!t.style.startsWith('kids-')));
+TEMPLATE_CATALOG.unshift(...OriginalTemplates.catalog.filter(t=>t.style.startsWith('kids-')),...OriginalTemplates.catalog.filter(t=>t.style.startsWith('blend-')),...OriginalTemplates.catalog.filter(t=>!t.style.startsWith('kids-')&&!t.style.startsWith('blend-')));
 
 {
  const valid=new Set(TEMPLATE_CATALOG.map(t=>t.id));let removed=false;
