@@ -1,3 +1,4 @@
+from effect_choices import open_effect_choices
 """Audit real editor entry points, empty states and offline preview."""
 from pathlib import Path
 from urllib.parse import urlparse
@@ -24,7 +25,7 @@ with sync_playwright() as p:
    page.evaluate('closeSheet()')
    page.locator('#menuBtn').click();page.locator('#menuWorkType').click();page.locator('[data-layout-mode='+mode+']').click()
    assert page.locator(control).count()>0,(width,mode,'initial')
-   page.evaluate('closeSheet()');page.locator('#layoutBtn').click()
+   page.evaluate('closeSheet()');open_effect_choices(page,'#layoutBtn')
    assert page.locator(control).count()>0,(width,mode,'reopened')
    assert page.locator('#templateBtn').is_disabled(),mode
    if mode in ['label','card']:
@@ -35,10 +36,10 @@ with sync_playwright() as p:
    if mode in ['card','idcard']:
     assert page.locator('[data-setting=fit]').count()==0
   page.evaluate("closeSheet();state.mode='calendar';state.calendarLayout='plain';render()")
-  page.locator('#layoutBtn').click();assert page.locator('[data-setting=fit]').count()==0
+  open_effect_choices(page,'#layoutBtn');assert page.locator('[data-setting=fit]').count()==0
   assert page.locator('.photo-tools').is_hidden()
   page.evaluate("closeSheet();state.mode='photo';render()")
-  page.locator('#layoutBtn').click();assert page.locator('[data-setting=orientation]').count()>0
+  open_effect_choices(page,'#layoutBtn');assert page.locator('[data-setting=orientation]').count()>0
   server['device'].update(media=5009,checkedAt=int(time.time()*1000))
   page.evaluate("native.device.media=5009;native.device.checkedAt=Date.now();syncPaper()")
   assert page.locator('[data-setting=orientation]').count()==0

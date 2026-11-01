@@ -28,11 +28,13 @@ window.CropEditor=(()=>{
   for(const name of ['pointerup','pointercancel','lostpointercapture'])edge.addEventListener(name,()=>{frameDrag=null;});
  }
 
- function render(){
+ function render(){return Tone.preview(renderFrame);}
+ function renderFrame(){
   if(!ready()||!printPreview){view=null;canvas.classList.remove('photo-draggable');placeEdges(false);return;}
   const next=[state.mode,state.media,state.orientation,state.active,active()?.src].join('|');if(next!==scope){scope=next;resetGesture();}
   frame=photoFrames.find(f=>f.p===active())||photoFrames[0]||null;const dragGeometry=frame&&photoGeometry(frame.p,frame.w,frame.h,frame.fit);canvas.classList.toggle('photo-draggable',!!dragGeometry&&!peek&&(dragGeometry.ex>.5||dragGeometry.ey>.5));canvas.classList.toggle('photo-zoomed',!!frame&&(frame.p.zoom||1)>1.001);
-  const [w,h]=logicalSize(),stage=$('paperStage');if(displayLock&&(displayLock.family!==workFamily()||displayLock.photo!==active()||displayLock.w!==w||displayLock.h!==h||displayLock.transform!==JSON.stringify([active()?.turn,active()?.fit,active()?.border,active()?.zoom,active()?.x,active()?.y])))displayLock=null;
+  const [w,h]=logicalSize(),stage=$('paperStage');if(displayLock&&(displayLock.family!==workFamily()||displayLock.photo!==active()||displayLock.w!==w||displayLock.h!==h||(window.EffectBrowser?.kind()!=='layout'&&displayLock.transform!==JSON.stringify([active()?.turn,active()?.fit,active()?.border,active()?.zoom,active()?.x,active()?.y]))))displayLock=null;
+  if(displayLock&&window.EffectBrowser?.kind()==='layout')displayLock.transform=JSON.stringify([active()?.turn,active()?.fit,active()?.border,active()?.zoom,active()?.x,active()?.y]);
   let width,pad,tx,ty,cw,ch;
   const complete=state.mode==='photo'&&[5009,5012].includes(state.media)&&frame;
   if(complete){
