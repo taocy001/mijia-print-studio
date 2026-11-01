@@ -1,6 +1,6 @@
 window.TemplateStudio=(()=>{
  let openRequest=0;
- function selectTemplate(id){if(sheetKind!=='templates')return;state.mode=id?'template':'photo';state.templateId=id;if(active())active().templateId=id;$('sheetBody').querySelectorAll('.template-card').forEach(button=>{const selected=(button.dataset.template||null)===id;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));});schedule();}
+ function selectTemplate(id){if(sheetKind!=='templates')return;state.mode=id?'template':'photo';state.templateId=id;if(active())active().templateId=id;if(!id&&(active()?.fit||state.fit)==='cover'){state.border=0;if(active())active().border=0;}$('sheetBody').querySelectorAll('.template-card').forEach(button=>{const selected=(button.dataset.template||null)===id;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));});schedule();}
  function panelSize(){const [w,h]=logicalSize();return [w,state.media===5014?h/2:h];}
  function entry(p=active(),w=panelSize()[0],h=panelSize()[1]){const base=TEMPLATE_CATALOG.find(t=>t.id===(p?.templateId||state.templateId))||TEMPLATE_CATALOG[0];return OriginalTemplates.variant(base,w,h);}
  async function ensureCurrent(){}
