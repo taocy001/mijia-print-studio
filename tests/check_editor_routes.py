@@ -43,6 +43,10 @@ with sync_playwright() as p:
   server['device'].update(media=5009,checkedAt=int(time.time()*1000))
   page.evaluate("native.device.media=5009;native.device.checkedAt=Date.now();syncPaper()")
   assert page.locator('[data-setting=orientation]').count()==0
+  page.evaluate('closeSheet();openPaper()')
+  page.evaluate('goBack()');assert page.evaluate("sheetKind==='device'")
+  page.evaluate('goBack()');assert page.evaluate("sheetKind==='menu'")
+  page.evaluate('goBack()');assert page.evaluate("sheetKind!=='menu'")
   for theme in ['light','dark']:
    page.evaluate('closeSheet()');page.emulate_media(color_scheme=theme);page.locator('#menuBtn').click()
    contrast=page.evaluate('''()=>{const h=document.querySelector('#sheet>header'),t=document.getElementById('sheetTitle');const lum=s=>{const c=s.match(/[\\d.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4});return c[0]*.2126+c[1]*.7152+c[2]*.0722};let bg=h;while(bg.parentElement&&getComputedStyle(bg).backgroundColor==='rgba(0, 0, 0, 0)')bg=bg.parentElement;const a=lum(getComputedStyle(bg).backgroundColor),b=lum(getComputedStyle(t).color);return (Math.max(a,b)+.05)/(Math.min(a,b)+.05)}''')

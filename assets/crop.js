@@ -7,7 +7,7 @@ window.CropEditor=(()=>{
  const workFamily=()=>['photo','template'].includes(state.mode)?'photo':state.mode;
  function lockDisplay(){resetGesture();if(view)displayLock={tx:view.tx,ty:view.ty,cw:canvas.width,ch:canvas.height,w:view.paper.w,h:view.paper.h,photo:active(),family:workFamily(),transform:JSON.stringify([active()?.turn,active()?.fit,active()?.border,active()?.zoom,active()?.x,active()?.y])};}
  function unlockDisplay(){displayLock=null;}
- function resetGesture(){start=previous=null;axis=null;frameDrag=null;target=mouse=gestureScale=null;}
+ function resetGesture(){window.EditHistory?.commit();start=previous=null;axis=null;frameDrag=null;target=mouse=gestureScale=null;}
  function placeEdges(enabled){
   for(const edge of edges)edge.hidden=!enabled;
   if(!enabled||!view)return;
@@ -19,13 +19,13 @@ window.CropEditor=(()=>{
  for(const edge of edges){
   edge.addEventListener('pointerdown',e=>{if(browsing()||!frame||!view||peek||e.button!==0)return;e.preventDefault();e.stopPropagation();
    const rect=canvas.getBoundingClientRect(),g=photoGeometry(frame.p,frame.w,frame.h,frame.fit);
-   frameDrag={id:e.pointerId,p:frame.p,x:e.clientX,y:e.clientY,px:frame.p.x||0,py:frame.p.y||0,sx:canvas.width/rect.width,sy:canvas.height/rect.height,ex:g.ex,ey:g.ey};edge.setPointerCapture(e.pointerId);
+   window.EditHistory?.begin('gesture',frame.p);frameDrag={id:e.pointerId,p:frame.p,x:e.clientX,y:e.clientY,px:frame.p.x||0,py:frame.p.y||0,sx:canvas.width/rect.width,sy:canvas.height/rect.height,ex:g.ex,ey:g.ey};edge.setPointerCapture(e.pointerId);
   });
   edge.addEventListener('pointermove',e=>{const d=frameDrag;if(browsing()||!d||d.id!==e.pointerId||peek)return;e.preventDefault();d.p.facePending=false;
    if(d.ex)d.p.x=Math.max(-1,Math.min(1,d.px-(e.clientX-d.x)*d.sx/d.ex));
    if(d.ey)d.p.y=Math.max(-1,Math.min(1,d.py-(e.clientY-d.y)*d.sy/d.ey));schedule();
   });
-  for(const name of ['pointerup','pointercancel','lostpointercapture'])edge.addEventListener(name,()=>{frameDrag=null;});
+  for(const name of ['pointerup','pointercancel','lostpointercapture'])edge.addEventListener(name,()=>{window.EditHistory?.commit();frameDrag=null;});
  }
 
  function render(){return Tone.preview(renderFrame);}
@@ -67,7 +67,7 @@ window.CropEditor=(()=>{
  function gesturePoint(e){return {x:e.clientX*gestureScale.x,y:e.clientY*gestureScale.y};}
  function geometry(touches){const p=Array.from(touches,t=>gesturePoint(t));return !p.length?null:p.length===1?{...p[0],d:0,n:1}:{x:(p[0].x+p[1].x)/2,y:(p[0].y+p[1].y)/2,d:Math.hypot(p[0].x-p[1].x,p[0].y-p[1].y),n:2};}
  function choose(p){return photoFrames.find(f=>p.x>=f.x&&p.x<=f.x+f.w&&p.y>=f.y&&p.y<=f.y+f.h)||frame;}
- function move(now,old,multi){if(browsing())return;displayLock=null;if(!target||peek)return;target.p.facePending=false;const {p,w,h,fit}=target,g=photoGeometry(p,w,h,fit),direction=state.mode==='photo'&&[5009,5012].includes(state.media)?-1:1;if(g.ex)p.x=Math.max(-1,Math.min(1,(p.x||0)+direction*(now.x-old.x)/g.ex));if(multi&&g.ey)p.y=Math.max(-1,Math.min(1,(p.y||0)+direction*(now.y-old.y)/g.ey));if(multi&&old.d&&now.d)p.zoom=Math.max(1,Math.min(4,(p.zoom||1)*now.d/old.d));schedule();}
+ function move(now,old,multi){if(browsing())return;displayLock=null;if(!target||peek)return;window.EditHistory?.begin('gesture',target.p);target.p.facePending=false;const {p,w,h,fit}=target,g=photoGeometry(p,w,h,fit),direction=state.mode==='photo'&&[5009,5012].includes(state.media)?-1:1;if(g.ex)p.x=Math.max(-1,Math.min(1,(p.x||0)+direction*(now.x-old.x)/g.ex));if(multi&&g.ey)p.y=Math.max(-1,Math.min(1,(p.y||0)+direction*(now.y-old.y)/g.ey));if(multi&&old.d&&now.d)p.zoom=Math.max(1,Math.min(4,(p.zoom||1)*now.d/old.d));schedule();}
  canvas.addEventListener('touchstart',e=>{if(browsing())return;if(!view||peek)return;beginGesture();previous=geometry(e.touches);if(e.touches.length===1){start=previous;target=choose(toPaper(e.touches[0]));axis=target&&canvas.classList.contains('photo-draggable')?'photo':null;if(axis==='photo')e.preventDefault();}else{e.preventDefault();axis='multi';target=target||frame;}},{passive:false});
  canvas.addEventListener('touchmove',e=>{if(browsing())return;if(!previous||!view)return;const now=geometry(e.touches);if(now.n!==previous.n){previous=start=now;return;}if(now.n>1){e.preventDefault();move(now,previous,true);previous=now;axis='multi';return;}
   // Native vertical scrolling wins. Horizontal drags are edited directly, without a mode switch.
@@ -79,8 +79,8 @@ window.CropEditor=(()=>{
  // Mouse drag and wheel keep the desktop-style direct editing path.
  canvas.addEventListener('pointerdown',e=>{if(browsing())return;if(e.pointerType==='mouse'&&e.button===0){beginGesture();mouse=gesturePoint(e);target=choose(toPaper(e));canvas.setPointerCapture(e.pointerId);}});
  canvas.addEventListener('pointermove',e=>{if(browsing())return;if(mouse){const p=gesturePoint(e);move(p,mouse,true);mouse=p;}});
- for(const event of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(event,()=>mouse=null);
- canvas.addEventListener('wheel',e=>{if(browsing()){if(e.ctrlKey)e.preventDefault();return;}displayLock=null;if(!e.ctrlKey||!frame)return;e.preventDefault();frame.p.facePending=false;frame.p.zoom=Math.max(1,Math.min(4,(frame.p.zoom||1)*(e.deltaY>0?.9:1.1)));schedule();},{passive:false});
+ for(const event of ['pointerup','pointercancel','lostpointercapture'])canvas.addEventListener(event,e=>{if(e.pointerType!=='touch')window.EditHistory?.commit();mouse=null;});
+ canvas.addEventListener('wheel',e=>{if(browsing()){if(e.ctrlKey)e.preventDefault();return;}displayLock=null;if(!e.ctrlKey||!frame)return;e.preventDefault();window.EditHistory?.begin('wheel',frame.p);frame.p.facePending=false;frame.p.zoom=Math.max(1,Math.min(4,(frame.p.zoom||1)*(e.deltaY>0?.9:1.1)));window.EditHistory?.defer();schedule();},{passive:false});
  window.addEventListener('resize',()=>{resetGesture();render();LayerEditor.refresh();});
  schedule();return {render,geometry:()=>view,toPaper,lockDisplay,unlockDisplay,resetGesture};
 })();

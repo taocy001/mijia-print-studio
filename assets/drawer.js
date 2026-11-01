@@ -3,11 +3,21 @@ window.Drawer=(()=>{
  const sheet=$('sheet'),body=$('sheetBody'),handle=$('sheetHandle'),header=sheet.querySelector('header');
  let drag=null,current=0,level='half',settingsLevel='half',kind='',ignoreClick=false,contentStart=null,glide=0;
  const settings=new Set(['menu','device','paper','sharing','coat','workType','history','historyDetail','hostQueue','job','models','qr','camera']);
- const remember=()=>{if(settings.has(kind))settingsLevel=level;};
+ const panels=new Set(['layout','filters','templates']),memory=new Map();let restoreRequest=0;
+ function capture(){if(!sheet.hidden&&panels.has(kind))memory.set(kind,{level,scroll:body.scrollTop,sheetScroll:sheet.scrollTop});}
+ const remember=()=>{if(settings.has(kind))settingsLevel=level;capture();};
+ function restore(next,same){
+  const request=++restoreRequest,content=body.firstElementChild,record=memory.get(next);
+  if(!panels.has(next))return;
+  const place=()=>{if(request!==restoreRequest||kind!==next||sheet.hidden||body.firstElementChild!==content)return;
+   if(record){body.scrollTop=record.scroll;sheet.scrollTop=record.sheetScroll;}
+   else if(!same){const chosen=body.querySelector(next==='templates'?'.template-card.selected':next==='filters'?'.filter-card.active':'[data-fit].selected,[data-setting=fit].selected,.fit-card.selected,.fit-option.selected');if(chosen){const r=chosen.getBoundingClientRect(),b=body.getBoundingClientRect();if(r.top<b.top||r.bottom>b.bottom)body.scrollTop+=r.top-b.top-Math.max(0,(b.height-r.height)/2);}}
+  };place();requestAnimationFrame(place);
+ }
  const bounds=()=>{const viewport=Math.max(108,Math.min(innerHeight,window.visualViewport?.height||innerHeight)),full=viewport-16;return {half:Math.min(full,Math.max(220,viewport*.46)),full};};
  function apply(h,animate=false){const {full}=bounds();current=Math.max(92,Math.min(full,h));sheet.classList.toggle('drawer-animate',animate);sheet.style.setProperty('--drawer-height',current+'px');handle.setAttribute('aria-expanded',String(current>bounds().half+30));}
- function open(next,same){cancelAnimationFrame(glide);drag=null;contentStart=null;sheet.classList.remove('drawer-dragging');kind=next;if(next==='confirm')level='full';else if(settings.has(next))level=settingsLevel;else if(!same)level='half';apply(bounds()[level],false);}
- function reset(){cancelAnimationFrame(glide);remember();kind='';drag=null;contentStart=null;sheet.classList.remove('drawer-animate','drawer-dragging');sheet.style.removeProperty('--drawer-height');}
+ function open(next,same){cancelAnimationFrame(glide);drag=null;contentStart=null;sheet.classList.remove('drawer-dragging');kind=next;if(next==='confirm')level='full';else if(settings.has(next))level=settingsLevel;else if(panels.has(next))level=memory.get(next)?.level||'half';else if(!same)level='half';apply(bounds()[level],false);}
+ function reset(){++restoreRequest;cancelAnimationFrame(glide);remember();kind='';drag=null;contentStart=null;sheet.classList.remove('drawer-animate','drawer-dragging');sheet.style.removeProperty('--drawer-height');}
  function begin(y){drag={startY:y,lastY:y,startHeight:current||sheet.getBoundingClientRect().height,lastAt:performance.now(),velocity:0,moved:false};sheet.classList.add('drawer-dragging');sheet.classList.remove('drawer-animate');}
  function move(y){if(!drag)return;const now=performance.now(),dt=Math.max(1,now-drag.lastAt);drag.velocity=(y-drag.lastY)/dt;drag.lastAt=now;drag.lastY=y;drag.moved ||=Math.abs(y-drag.startY)>5;apply(drag.startHeight+drag.startY-y);}
  function end(cancel=false){if(!drag)return;const d=drag;drag=null;sheet.classList.remove('drawer-dragging');ignoreClick=d.moved;setTimeout(()=>ignoreClick=false,0);const {half,full}=bounds(),delta=d.lastY-d.startY;
@@ -30,5 +40,5 @@ window.Drawer=(()=>{
  body.addEventListener('touchcancel',()=>{if(contentStart?.dragging)end(true);contentStart=null;},{passive:true});
  const resize=()=>{if(!sheet.hidden){drag=null;contentStart=null;sheet.classList.remove('drawer-dragging');apply(bounds()[level]);}};
  window.addEventListener('resize',resize);window.visualViewport?.addEventListener('resize',resize);
- return {open,reset,bounds,height:()=>current};
+ return {open,reset,capture,restore,bounds,height:()=>current};
 })();

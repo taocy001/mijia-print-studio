@@ -118,3 +118,10 @@ body.layer-editing #layerTools{display:none}
 .emoji-grid button[aria-pressed=true]{box-shadow:inset 0 0 0 2px #b69a58}
 
 .layout-fit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.layout-fit-grid canvas{width:100%;height:100px;object-fit:contain;border-radius:6px}.layout-fit-grid .template-card span{white-space:nowrap}
+
+/* Keep the center of a compact thumbnail available for photo selection. */
+body .photo-strip .remove-photo,body.landscape .photo-strip .remove-photo{top:min(-10px,calc(50% - 42px));right:-6px;width:40px;height:40px;min-height:40px}
+/* A full corner target needs its own room beside a landscape thumbnail. */
+body.landscape:not(.desktop-editor){--rail:148px}
+body.landscape:not(.desktop-editor) .editor-controls{width:88px}
+body.landscape:not(.desktop-editor) .photo-strip .remove-photo{top:-5px;right:-18px}
