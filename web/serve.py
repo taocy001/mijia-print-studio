@@ -48,7 +48,7 @@ class Studio:
             session={'id':saved.get('id',str(uuid.uuid4())),'files':set(saved.get('files',[])),'bytes':0,'uploads':0,'ownerKey':owner_key}
             for job in self.core.jobs:
                 if job['owner']==session['id']:
-                    session['files'].update('/private/'+page['file'] for page in job.get('pages',[]) if page.get('file'))
+                    session['files'].update('/private/'+page['file'] for page in job.get('pages',[]) if page.get('file') and not job.get('filesCleared'))
             self.sessions[token]=session;self.remember(session)
             response=web.HTTPSeeOther('/');response.set_cookie('liuying',token,httponly=True,samesite='Strict');response.set_cookie('liuying-owner',owner,httponly=True,samesite='Strict',max_age=31536000);return response
         session=self.sessions.get(r.cookies.get('liuying'))
@@ -100,6 +100,16 @@ class Studio:
             self.models.start(body.get('id'));return web.json_response({'ok':True},status=202)
         if r.path=='/api/print':
             result=await self.core.submit(session,body);return web.json_response(result)
+        if r.path=='/api/history/storage':return web.json_response(await self.core.history_storage(session,body))
+        if r.path=='/api/history/clear':
+            result,removed=await self.core.history_cleanup(session,body)
+            paths={'/private/'+name for name in removed}
+            for active in self.sessions.values():
+                if active['id']==session['id']:active['files'].difference_update(paths)
+            for owner in self.owners.values():
+                if owner['id']==session['id']:owner['files']=sorted(set(owner['files'])-paths)
+            atomic(self.data/'web-owners.json',self.owners)
+            return web.json_response(result)
         if r.path=='/api/reprint':return web.json_response(await self.core.reprint(session,body))
         if r.path=='/api/cutout':
             source=body['source']
