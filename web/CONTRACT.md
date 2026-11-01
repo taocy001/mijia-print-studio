@@ -12,7 +12,7 @@ Android App 内主动开启同一 Wi-Fi 共享，本机直接使用 App。
 这是局域网 HTTP，照片传输未加密，只适用于可信家庭网络；不做公网映射。
 
 - `POST /api/pair`：表单 `code`，成功后转到编辑器。
-- `GET /api/sharing`：已配对客户端读取共享 HTTP 地址及 AirPrint 状态，不返回配对码。
+- `GET /api/sharing`：已配对客户端读取共享 HTTP 地址、当前配对码及 AirPrint 状态；未配对请求拒绝。`canManagePairing` 标明是否可重置授权。
 - `GET /api/state`：当前会话任务、历史和设备状态，不暴露其他浏览器照片。
 - `POST /api/upload`：原始图片二进制，最多 25 MB；返回 `{src,width,height,faces}`，`faces` 为归一化 `[left,top,right,bottom]` 数组，检测不可用时为空。Android 转为 JPEG 并限制长边 2400。
 - `POST /api/cutout`：`{source}`，返回 `{images:{white,blue,red}}`。
@@ -28,9 +28,11 @@ Android App 内主动开启同一 Wi-Fi 共享，本机直接使用 App。
 
 共享服务使用 Android connectedDevice 前台服务，通知中可以停止。
 打印与状态检查共用蓝牙互斥锁；远程请求进入串行队列，失败或结果未知时暂停，不自动重印。
-停止共享会撤销配对并取消尚未开始的队列；已开始的批次继续由前台服务管理。
+停止共享保留配对授权并取消尚未开始的队列；已开始的批次继续由前台服务管理。
 进程被杀后不自动恢复打印；再次开启共享时取消旧等待任务，未知的已提交任务需在手机上检查。
-会话token仅保存在内存；停止共享或重启后必须重新配对。独立的HttpOnly归属Cookie可在配对成功后恢复本人照片与历史，不单独授权访问。归属密钥以哈希保存；同归属多会话合并文件授权。升级前已丢失的临时身份不自动恢复。
+会话 token 的哈希授权持久化一年，停止共享或重启后仍有效。独立的 HttpOnly 归属 Cookie 可在配对成功后恢复本人照片与历史，不单独授权访问。同归属重新配对会替换旧授权；升级前的内存会话需重配一次，已丢失的临时身份不自动恢复。
+
+Android 仅原生 App 可重置配对；电脑端 `POST /api/admin/pairing/reset` 仅已配对的本机回环客户端可用。重置更换配对码、撤销其他浏览器授权，保留照片及历史。
 
 ## 电脑后端
 
@@ -47,7 +49,7 @@ Android App 内主动开启同一 Wi-Fi 共享，本机直接使用 App。
 ## 平台差异
 
 共用编辑器、Android 承载 Web、电脑 Web、AirPrint 与蓝牙后端已进入同一仓库。
-旧任务不自动迁移或重放。Mac和Android通过持久owner Cookie恢复重新配对后的本人照片与历史，登录会话仍须重新建立。
+旧任务不自动迁移或重放。各端通过持久授权恢复登录；重新配对时通过 owner Cookie 恢复本人照片与历史。
 两端均提供精确重印。Mac另提供仅本机已配对管理员可访问的 `/api/admin/queue`、`/api/admin/reconcile`、`/api/admin/resolve`；Android尚无这些接口。
 手机 App 与浏览器使用相同的编辑数据、模板和合成实现；平台相关的文件导入、抠图与蓝牙能力保留独立适配。
 

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Build the Android app with the local SDK."""
 import os
+import argparse
+from build_assets import stage_assets
 import hashlib
 import json
 from pathlib import Path
@@ -15,7 +17,19 @@ ANDROID=SDK/'platforms/android-36/android.jar'
 BUILD=ROOT/'build'
 def run(*cmd):
     subprocess.run(list(map(str,cmd)),check=True,env={**os.environ,'JAVA_HOME':str(JDK)})
-def main():
+ABIS=('arm64-v8a','armeabi-v7a','x86','x86_64')
+
+def selected_libraries(names, abi=None):
+    selected=[name for name in names if name.startswith('jni/') and name.endswith('.so') and len(name.split('/'))==3 and name.split('/')[1] in ABIS and (abi is None or name.split('/')[1]==abi)]
+    required={abi} if abi else set(ABIS)
+    if {name.split('/')[1] for name in selected} != required:raise RuntimeError('Missing runtime architecture')
+    return selected
+
+def main(argv=None):
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--abi',choices=ABIS,help='Build for one architecture; default includes all four')
+    args=parser.parse_args(argv)
+    staged_assets=stage_assets(ROOT,BUILD/'assets')
     for name in ('classes','dex','generated','onnxruntime'):
         shutil.rmtree(BUILD/name,ignore_errors=True)
         (BUILD/name).mkdir(parents=True,exist_ok=True)
@@ -27,11 +41,10 @@ def main():
     runtime=BUILD/'onnxruntime';runtime.mkdir(exist_ok=True)
     with zipfile.ZipFile(ROOT/'deps/onnxruntime-android-1.23.2.aar') as archive:
         archive.extract('classes.jar',runtime)
-        for name in archive.namelist():
-            if name.startswith('jni/') and name.endswith('.so'):archive.extract(name,runtime)
+        for name in selected_libraries(archive.namelist(),args.abi):archive.extract(name,runtime)
     runtime_jar=runtime/'classes.jar'
     run(TOOLS/'aapt2','compile','--dir',ROOT/'res','-o',BUILD/'resources.zip')
-    run(TOOLS/'aapt2','link','-I',ANDROID,'--manifest',ROOT/'AndroidManifest.xml','-A',ROOT/'assets','--java',BUILD/'generated','-o',BUILD/'unsigned.apk',BUILD/'resources.zip')
+    run(TOOLS/'aapt2','link','-I',ANDROID,'--manifest',ROOT/'AndroidManifest.xml','-A',staged_assets,'--java',BUILD/'generated','-o',BUILD/'unsigned.apk',BUILD/'resources.zip')
     run(JDK/'bin/javac','-source','8','-target','8','-classpath',str(ANDROID)+os.pathsep+str(runtime_jar),'-d',BUILD/'classes',*sorted((ROOT/'src').glob('*.java')),*sorted((BUILD/'generated').rglob('*.java')))
     run(TOOLS/'d8','--lib',ANDROID,'--min-api','31','--output',BUILD/'dex',*sorted((BUILD/'classes').rglob('*.class')),runtime_jar)
     with zipfile.ZipFile(BUILD/'unsigned.apk','a') as z:
