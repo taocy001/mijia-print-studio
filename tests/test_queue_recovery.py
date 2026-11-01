@@ -122,7 +122,7 @@ class Browser(unittest.IsolatedAsyncioTestCase):
         if owner:headers['Cookie']='liuying-owner='+owner
         r=await self.client.post('/api/pair',data={'code':self.studio.code},headers=headers,allow_redirects=False)
         self.assertEqual(r.status,303);return r.cookies['liuying-owner'].value
-    async def test_restart_requires_pair_then_restores_owner_and_private_history(self):
+    async def test_owner_cookie_requires_pair_then_restores_private_history(self):
         await self.start_server();owner=await self.pair();session=next(iter(self.studio.sessions.values()))
         (self.studio.data/'photos').mkdir();(self.studio.data/'photos/test.jpg').write_bytes(b'photo')
         session['files'].add('/private/photos/test.jpg');self.studio.remember(session)

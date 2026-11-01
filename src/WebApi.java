@@ -14,20 +14,22 @@ final class WebApi implements LocalHttp.Handler {
  private void grantHistory(WebSessions.Session s,JSONObject state)throws JSONException{synchronized(s){JSONObject job=state.optJSONObject("job");if(job!=null&&job.has("file"))s.files.add("/private/"+job.getString("file"));JSONArray history=state.optJSONArray("history");if(history!=null)for(int i=0;i<history.length();i++)if(history.getJSONObject(i).has("file"))s.files.add("/private/"+history.getJSONObject(i).getString("file"));}}
  private LocalHttp.Response json(int status,JSONObject object){return LocalHttp.Response.text(status,"application/json; charset=utf-8",object.toString());}
  private static byte[] bytes(InputStream in)throws IOException{try(InputStream source=in;ByteArrayOutputStream out=new ByteArrayOutputStream()){byte[] b=new byte[8192];int n;while((n=source.read(b))!=-1)out.write(b,0,n);return out.toByteArray();}}
- public LocalHttp.Response handle(LocalHttp.Request r)throws Exception{
+ public LocalHttp.Response handle(LocalHttp.Request r)throws Exception{LocalHttp.Response response=handleRequest(r);if(!r.path.equals("/api/pair")){String cookie=sessions.persistentCookie(r.headers.get("cookie"));if(cookie!=null)response.headers.put("Set-Cookie",cookie);}return response;}
+ private LocalHttp.Response handleRequest(LocalHttp.Request r)throws Exception{
   if(r.path.equals("/api/pair")&&r.method.equals("POST")){
    String code=r.text().replaceFirst("^code=","");WebSessions.Pair pair=sessions.pair(code,r.headers.get("cookie"));
    if(pair==null)return LocalHttp.Response.text(403,"text/html; charset=utf-8",pairPage("配对码不正确或请求过多，请稍后重试"));
    WebSessions.Session restored=sessions.find("liuying="+pair.token);grantHistory(restored,PrintJobs.state(context,restored.id));
-   LocalHttp.Response out=LocalHttp.Response.text(303,"text/plain","");out.headers.put("Location","/");out.headers.put("Set-Cookie","liuying="+pair.token+"; HttpOnly; SameSite=Strict; Path=/");out.cookies.add("liuying-owner="+pair.owner+"; Max-Age=31536000; HttpOnly; SameSite=Strict; Path=/");return out;
+   LocalHttp.Response out=LocalHttp.Response.text(303,"text/plain","");out.headers.put("Location","/");out.headers.put("Set-Cookie","liuying="+pair.token+"; Max-Age="+WebSessions.COOKIE_MAX_AGE+"; HttpOnly; SameSite=Strict; Path=/");out.cookies.add("liuying-owner="+pair.owner+"; Max-Age="+WebSessions.COOKIE_MAX_AGE+"; HttpOnly; SameSite=Strict; Path=/");return out;
   }
   WebSessions.Session s=sessions.find(r.headers.get("cookie"));
   if(s==null){if(r.path.equals("/")&&r.method.equals("GET"))return LocalHttp.Response.text(200,"text/html; charset=utf-8",pairPage("输入手机 App 中显示的配对码"));return json(401,new JSONObject().put("error","请重新配对"));}
   if(r.method.equals("GET")){
-   if(r.path.equals("/api/sharing")){JSONObject state=SharingService.sharingState();state.remove("code");state.put("current","http://"+r.host).put("host","android");return json(200,state);}
+   if(r.path.equals("/api/sharing")){JSONObject state=SharingService.sharingState();state.put("code",sessions.code).put("canManagePairing",false);state.put("current","http://"+r.host).put("host","android");return json(200,state);}
    if(r.path.equals("/api/state")){JSONObject state=PrintJobs.state(context,s.id);if(SharingService.sharingState().optBoolean("paused")&&"queued".equals(state.getJSONObject("job").optString("phase")))state.getJSONObject("job").put("message","共享队列已暂停，请在手机上检查");grantHistory(s,state);return json(200,state);}
    if(r.path.equals("/session.js"))return LocalHttp.Response.text(200,"application/javascript","window.STUDIO_DRAFT_KEY="+JSONObject.quote("liuying-draft-"+s.id)+";");
    if(r.path.startsWith("/private/")){
+    boolean known;synchronized(s){known=s.files.contains(r.path);}if(!known)grantHistory(s,PrintJobs.state(context,s.id));
     synchronized(s){if(!s.files.contains(r.path))return json(404,new JSONObject().put("error","照片不存在"));}
     return new LocalHttp.Response(200,"image/jpeg",Files.readAllBytes(new File(context.getFilesDir(),r.path.substring(9)).toPath()));
    }
