@@ -13,7 +13,7 @@ with sync_playwright() as p:
  connect:()=>{calls++;return new Promise(resolve=>window.finishDetection=resolve)},printBatch:()=>{throw Error('Printing forbidden')}};''')
  def route(r):
   file=assets/(urlparse(r.request.url).path.lstrip('/') or 'index.html')
-  if file.is_file():r.fulfill(body=file.read_bytes(),content_type=mimetypes.guess_type(str(file))[0] or 'application/octet-stream')
+  if file.is_file():r.fulfill(body=file.read_bytes(),content_type={'.svg':'image/svg+xml','.js':'text/javascript','.css':'text/css','.html':'text/html','.png':'image/png','.jpg':'image/jpeg'}.get(file.suffix, mimetypes.guess_type(str(file))[0] or 'application/octet-stream'))
   else:r.fulfill(status=404,body='Missing')
  page.route('https://studio.local/**',route);page.goto('https://studio.local/');page.evaluate('LayerEditor.ready')
  for theme in ['light','dark']:
@@ -32,8 +32,9 @@ with sync_playwright() as p:
    assert button.is_disabled() and button.inner_text().strip()=='正在处理…'
    page.evaluate('deviceState.busy=false;deviceState.device={connected:true,media:5009,checkedAt:Date.now()};poll()')
    assert button.is_enabled() and page.evaluate('detectedPaper()')==5009
-   page.evaluate('deviceState.unresolved=true;poll()');assert button.is_disabled()
-   button.dispatch_event('click');assert page.evaluate('calls')==before+1
+   page.evaluate('deviceState.unresolved=true;poll()');assert button.is_enabled()
+   button.click();assert page.evaluate('calls')==before+2
+   page.evaluate('finishDetection()');page.wait_for_timeout(350)
    page.evaluate('deviceState.unresolved=false;poll()');button.click()
    page.locator('#closeSheet').click();page.evaluate('finishDetection()');page.wait_for_timeout(350)
    assert page.evaluate("sheetKind===''")
@@ -53,5 +54,7 @@ with sync_playwright() as p:
  assert not page.locator('#connectBeforePrint').is_visible() and page.evaluate('calls')==before+1
  page.evaluate('closeSheet();confirmPrint()');assert page.locator('#confirmSend').is_enabled()
  assert not page.locator('#connectBeforePrint').is_visible() and page.evaluate('calls')==before+1
+ page.evaluate("closeSheet();deviceState.unresolved=true;deviceState.job={token:'fixture',phase:'uncertain',jobId:158};poll();openJob()")
+ assert page.locator('#resolveUnknown').is_visible(), 'Known missing job must have a recovery exit'
  assert not errors,errors
  browser.close();print('PASS: three detection entries, light/dark styles, pending/busy locks, retry and navigation; no printing')

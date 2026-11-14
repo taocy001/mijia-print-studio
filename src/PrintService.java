@@ -46,6 +46,7 @@ public class PrintService extends Service {
                 job=Store.read(this,"job.json");
                 if(!job.has("token"))throw new IOException("没有待处理任务");
                 Store.device=printer.status();PrinterStatus.verifiedSession=true;
+                if("resolve".equals(action)){resolve(printer);return;}
                 if("print".equals(action))startPrint(printer);
                 else if("cancel".equals(action)){
                     int id=job.optInt("jobId",0);if(id<=0)throw new IOException("未取得任务编号，不能自动取消。请在米家中检查任务。");
@@ -61,6 +62,8 @@ public class PrintService extends Service {
             }catch(Exception e){
                 PrinterStatus.invalidate();
                 try{if(job==null)job=Store.read(this,"job.json");
+                    if(!job.has("originalFailure"))job.put("originalFailure",new JSONObject().put("phase",job.optString("phase")).put("message",job.optString("message")).put("lastInfo",job.optJSONObject("lastInfo")));
+                    job.put("lastError",new JSONObject().put("type",e.getClass().getSimpleName()).put("message",friendly(e)).put("at",System.currentTimeMillis()));
                     if("done".equals(job.optString("phase"))&&job.optJSONArray("remaining")!=null&&job.getJSONArray("remaining").length()>0){stopBatch=true;batchFailed=true;Store.batchFailure(this,job);}
                     else if(!Store.terminal(job)){
                         boolean untouched="prepared".equals(job.optString("phase"));
@@ -75,7 +78,14 @@ public class PrintService extends Service {
             }
         },"liuying-print").start();
     }
-    private static String friendly(Exception e){String text=e.getMessage();return text==null||text.matches("(?s)[\\x00-\\x7F]*")?"蓝牙通讯中断或连接超时，请检查打印机电源和连接":text;}
+    private static String friendly(Exception e){if(e instanceof JSONException)return "打印机返回的数据格式无法识别，已保留原任务记录";String text=e.getMessage();return text==null||text.matches("(?s)[\\x00-\\x7F]*")?"蓝牙通讯中断或连接超时，请检查打印机电源和连接":text;}
+    private void resolve(Printer printer)throws Exception{
+        if(!JobRecovery.recoverable(job.optString("phase")))throw new IOException("当前记录不需要手动结束");
+        JSONObject queue=printer.rpc("get-job-id-list",new JSONObject()).getJSONObject("result");
+        if(!JobRecovery.canResolve(Store.device.optString("state"),queue.opt("job-id-list")))throw new IOException("打印机仍有任务或尚未空闲，请检查后再结束记录");
+        job.put("resolution",new JSONObject().put("previousPhase",job.optString("phase")).put("previousMessage",job.optString("message")).put("queueEmpty",true).put("at",System.currentTimeMillis()));
+        update("aborted","已核对打印机空闲、队列为空，结束本次记录；原结果未确认，不会自动重印或续打",0);
+    }
     private void startPrint(Printer printer)throws Exception{
         if(!"prepared".equals(job.optString("phase")))throw new IOException("任务已经提交，禁止重复创建");
         byte[] jpeg=Files.readAllBytes(new File(getFilesDir(),job.getString("file")).toPath());
@@ -83,7 +93,7 @@ public class PrintService extends Service {
         if(jpeg.length>1048576||jpeg.length<4||b.outWidth!=(media==5009?1040:1216)||b.outHeight!=(media==5009?1040:1824))throw new IOException("照片尺寸不正确");
         int tray=Store.device.optInt("media");
         if(tray!=(media==5014?5012:media)){update("rejected","纸盒与选择的相纸不一致，请核对后重试",0);return;}
-        String alert=PrinterAlerts.describe(Store.device.optString("alert"));if(!alert.isEmpty()){update("rejected",alert+"。照片尚未提交",0);return;}
+        String alert=PrinterAlerts.describe(Store.device.optString("alert"));if(!alert.isEmpty()){job.put("alertCode",Store.device.optString("alert"));update("rejected","照片尚未提交："+alert,0);return;}
         if(Store.device.optInt("ribbon",-1)==0){update("rejected","色带已耗尽，请更换色带。照片尚未提交",0);return;}
         JSONObject queue=printer.rpc("get-job-id-list",new JSONObject()).getJSONObject("result");
         if(!"".equals(queue.getString("job-id-list"))){update("rejected","打印机还有任务，请等待完成",0);return;}
@@ -95,7 +105,7 @@ public class PrintService extends Service {
             .put("file-type","jpg").put("media-size",media).put("channel",576).put("sharpenmode",job.optInt("sharpen",0)));
         job.put("createResponse",answer);Store.write(this,"job.json",job);
         JSONObject result=answer.optJSONObject("result");
-        if(result!=null&&result.optInt("error-code",0)!=0){update("rejected","打印机拒绝任务："+result.optInt("error-code"),0);return;}
+        if(result!=null&&result.optInt("error-code",0)!=0){update("rejected","打印机拒绝任务："+JobRecovery.error(result.optInt("error-code")),0);return;}
         int id=result==null?0:result.optInt("job-id",result.optInt("job_id",0));
         if(id<=0)throw new IOException("创建结果无法确认");
         job.put("jobId",id);update("uploading","正在传送照片…",0);
@@ -109,7 +119,7 @@ public class PrintService extends Service {
         return info.optInt("transfer-status",-1)==3&&expected>0&&received>=0&&received<expected?"照片传输不完整（缺少 "+(expected-received)+" 字节），打印机已中止；未自动重试":"";
     }
     private String printerFailure(Printer printer,String fallback){
-        try{Store.device=printer.status();String alert=PrinterAlerts.describe(Store.device.optString("alert"));if(!alert.isEmpty())return alert;if(Store.device.optInt("ribbon",-1)==0)return "色带已耗尽，请更换色带";}catch(Exception ignored){}
+        try{Store.device=printer.status();job.put("deviceAtFailure",new JSONObject().put("state",Store.device.optString("state")).put("alert",Store.device.optString("alert")).put("ribbon",Store.device.optInt("ribbon",-1)).put("checkedAt",System.currentTimeMillis()));String alert=PrinterAlerts.describe(Store.device.optString("alert"));if(!alert.isEmpty())return alert;if(Store.device.optInt("ribbon",-1)==0)return "色带已耗尽，请更换色带";}catch(Exception ignored){}
         return fallback;
     }
     private void monitor(Printer printer)throws Exception{

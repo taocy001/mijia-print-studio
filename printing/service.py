@@ -2,6 +2,7 @@
 import asyncio,hashlib,json,logging,os,re,tempfile,threading,time,uuid,sys
 from pathlib import Path
 from .images import page_files,UserError
+from .errors import describe as describe_errors, rewrite as rewrite_error, PrinterResponseError
 from .platform import open_lock,lock_exclusive,user_id
 ROOT=Path(__file__).resolve().parents[1]
 _log=logging.getLogger(__name__)
@@ -72,7 +73,7 @@ class PrintService:
     @staticmethod
     def _read_device(printer):
         v=printer.get_prop('printer-state','printer-state-alerts','media-size','ribbon-info')
-        return dict(connected=True,state=str(v[0]),alert=v[1],media=v[2]['media-size'],ribbon=v[3].get('ribbon-info',[0,0,-1])[2],checkedAt=int(time.time()*1000))
+        return dict(connected=True,state=str(v[0]),alert=v[1],alertMessage=describe_errors(v[1]),media=v[2]['media-size'],ribbon=v[3].get('ribbon-info',[0,0,-1])[2],checkedAt=int(time.time()*1000))
     def _unavailable(self):
         self.device={**self.device,'connected':False,'checkedAt':int(time.time()*1000),'error':'蓝牙暂不可用，稍后自动重连'}
     @staticmethod
@@ -121,11 +122,15 @@ class PrintService:
                     else:phase=await self._device_call(self.send,job)
                     job.update(phase=phase,message='模拟完成（未打印）' if self.simulate else '打印完成' if phase=='done' else job.get('terminalMessage','任务已停止'),progress=100 if phase=='done' else 0)
                     self.paused=any(j['phase']=='uncertain' for j in self.jobs)
-                except Exception:
+                except Exception as error:
+                    job.setdefault('originalFailure',{'message':job.get('message',''),'telemetry':job.get('telemetry',{})})
+                    job['lastError']={'type':type(error).__name__,'message':str(error)[:500],'at':int(time.time()*1000)}
                     uncertain=bool(job.get('mayHavePrinted'))
                     complete=sum(p.get('phase')=='done' for p in job.get('pages',[]))
                     phase='uncertain' if uncertain else 'done' if complete==len(job['pages']) else 'cancelled' if complete else 'rejected'
                     job.update(phase=phase,completedPages=complete,message='打印结果待核对；不会自动重印' if uncertain else '打印完成' if phase=='done' else '剩余页面未发送，请检查连接、相纸或耗材' if complete else '尚未发送：请检查连接、相纸或耗材后重新提交')
+                    detail=str(error) if any(ord(c)>127 for c in str(error)) else '蓝牙连接或通信失败'
+                    job['message']+='：'+detail[:300]
                     self.paused=any(j['phase']=='uncertain' for j in self.jobs)
                 finally:self._active_job=None;self._batch_verified=False
                 if job['phase']!='done' and job.get('completedPages'):
@@ -149,6 +154,7 @@ class PrintService:
                     if record.get('job'):page['jobId']=record['job'];job['jobId']=record['job']
                     if 'info' in record:page['terminalInfo']=record['info'];job['terminalInfo']=record['info']
                     if record.get('message'):job['terminalMessage']=record['message']
+                    if 'alert' in record:job['deviceAtFailure']={k:record[k] for k in ('alert','ribbon')}
                     job['completedPages']=sum(p.get('phase')=='done' for p in job['pages']);self.save()
                 def telemetry(record):
                     job['telemetry']={**job.get('telemetry',{}),**record}
@@ -194,9 +200,11 @@ class PrintService:
             try:self.device=await self._device_call(read)
             except Exception as error:
                 self._unavailable()
+                if isinstance(error,PrinterResponseError):self.device['error']=str(error)
                 raise UserError(self.device['error']) from error
     def public(self,job):
         result={k:v for k,v in job.items() if k in ('token','phase','message','progress','file','media','copies','title','orientation','createdAt','batchCount','batchIndex','jobId','completedPages','terminalInfo','telemetry')}
+        if 'message' in result:result['message']=rewrite_error(result['message'])
         index=job.get('currentPage',0)
         pages=job.get('pages',[])
         if type(index) is int and 0<=index<len(pages):
@@ -307,8 +315,10 @@ class PrintService:
                 identifier=own.get('jobId') or record.get('job')
                 if record.get('job') and own.get('jobId') and record['job']!=own['jobId']:raise UserError('待确认记录不匹配，请现场核对')
                 if type(identifier)!=int or identifier<=0:raise UserError('未取得任务编号，请在服务端核对，不能自动重印')
-                records=printer.client.rpc('get-job-info',{'job-id':identifier});found=[v for v in records if v.get('job-id')==identifier]
-                if len(found)!=1:raise UserError('未能确认原任务，请继续保留记录')
+                records=printer.client.rpc('get-job-info',{'job-id':identifier})
+                if isinstance(records,dict) and records.get('error-code'):raise UserError(describe_errors(records['error-code']))
+                found=[v for v in records if v.get('job-id')==identifier]
+                if len(found)!=1:raise UserError('打印机已找不到原任务；请核对出纸后，在本机打印队列中结束记录，不会自动重印')
                 phase={9:'done',8:'cancelled',7:'aborted'}.get(found[0].get('job-state'),'uncertain')
                 from .bluetooth_printer import terminal_info,terminal_message
                 own['terminalInfo']=terminal_info(found[0]);own['terminalMessage']=terminal_message(own['terminalInfo'])
@@ -330,6 +340,14 @@ class PrintService:
             if own is None:raise UserError('未找到待核对任务')
             # Keep evidence, never upload or resume the remaining batch.
             def clear():
+                if not self.simulate:
+                    try:
+                        printer=self.connection(True)
+                        self.device=self._read_device(printer)
+                        queue=printer.client.rpc('get-job-id-list',{})
+                        if not isinstance(queue,dict) or queue.get('job-id-list') not in ('',[]) or str(self.device.get('state')) not in ('20','30'):
+                            raise UserError('打印机仍有任务或尚未空闲，请检查后再结束记录')
+                    finally:self.disconnect()
                 key=hashlib.sha256(str(self.address).replace('-',':').upper().encode()).hexdigest()[:24]
                 path=self.data/'bluetooth-state'/(key+'.json')
                 if path.is_file():
@@ -339,6 +357,7 @@ class PrintService:
                     if own.get('jobId') and record.get('job') and own['jobId']!=record['job']:raise UserError('记录不匹配，请继续保留')
                     path.rename(path.with_suffix('.resolved-'+str(int(time.time()*1000))))
             await asyncio.to_thread(clear)
-            own.update(phase='cancelled',mayHavePrinted=False,message='已现场核对并结束记录；未发送的页面不会续打')
+            own['resolution']={'previousPhase':own['phase'],'previousMessage':own.get('message',''),'at':int(time.time()*1000),'queueEmpty':not self.simulate}
+            own.update(phase='cancelled',mayHavePrinted=False,message='已核对打印机空闲、队列为空并结束记录；原结果未确认，不会自动重印或续打')
             self.paused=any(j['phase']=='uncertain' for j in self.jobs);self.save()
         return {'ok':True}

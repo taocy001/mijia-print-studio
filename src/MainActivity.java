@@ -290,14 +290,13 @@ public final class MainActivity extends Activity {
         }
         @JavascriptInterface public void resolveUnknown(){main.post(()->{
             JSONObject current=Store.read(MainActivity.this,"job.json");
-            if(Store.busy||current.has("jobId")||!current.has("token")||Store.terminal(current))return;
+            if(Store.busy||!JobRecovery.recoverable(current.optString("phase")))return;
             new AlertDialog.Builder(MainActivity.this).setTitle("结束结果未知的记录？")
-                .setMessage("请先确认打印机已停止，并检查是否已经出纸。这里只归档本次记录，不会重新打印，也不会取消打印机里的任务。")
+                .setMessage("请先确认打印机已停止，并检查是否已经出纸。随后会重新读取设备状态；仅在打印机空闲且队列为空时结束本次记录，不会重新打印。")
                 .setNegativeButton("继续检查",null).setPositiveButton("已检查，结束记录",(d,w)->{
                     synchronized(Store.LOCK){JSONObject latest=Store.read(MainActivity.this,"job.json");
-                        if(Store.busy||!current.optString("token").equals(latest.optString("token"))||latest.has("jobId"))return;
-                        try{latest.put("phase","aborted").put("message","手动结束结果未知的记录，未重新打印");Store.write(MainActivity.this,"job.json",latest);Store.archive(MainActivity.this,latest);PrintJobs.finish(MainActivity.this,latest);}
-                        catch(Exception e){event("toast","记录更新失败，请重试");}}
+                        if(Store.busy||!current.optString("token").equals(latest.optString("token"))||!JobRecovery.recoverable(latest.optString("phase")))return;
+                        service("resolve");}
                 }).show();
         });}
     }

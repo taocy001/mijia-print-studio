@@ -50,18 +50,22 @@ final class Printer implements AutoCloseable {
             send(Wire.frame(3,6,3,id,0,0,Wire.crypt(key,request.toString().getBytes(StandardCharsets.UTF_8),true)));
             while(true){Wire.Frame frame=receive(3,7);if(frame.total>1)throw new IOException("打印机返回了暂不支持的分段状态");
                 JSONObject result=new JSONObject(Wire.text(Wire.crypt(key,frame.body,false)));
-                if(result.optInt("id",-1)==id)return result;}
+                if(result.optInt("id",-1)==id){if(result.has("error")){JSONObject error=result.optJSONObject("error");String code=error==null?String.valueOf(result.opt("error")):String.valueOf(error.opt("code"));throw new IOException("打印机请求未完成："+PrinterAlerts.code(code));}return result;}}
         }finally{deadline.cancel(false);}
     }
     JSONObject status()throws Exception{
         JSONArray r=rpc("get_prop",new JSONArray(new String[]{"printer-state","printer-state-alerts","media-size","ribbon-info"})).getJSONArray("result");
         int media=r.getJSONObject(2).getInt("media-size");JSONArray ribbon=r.getJSONObject(3).optJSONArray("ribbon-info");
         return new JSONObject().put("connected",true).put("name","米家桌面照片机 2").put("address",address)
-            .put("state",r.optString(0)).put("alert",r.optString(1)).put("media",media)
+            .put("state",r.optString(0)).put("alert",r.optString(1)).put("alertMessage",PrinterAlerts.describe(r.optString(1))).put("media",media)
             .put("ribbon",ribbon==null?-1:ribbon.optInt(2,-1)).put("checkedAt",System.currentTimeMillis());
     }
     JSONObject job(int id)throws Exception{
-        JSONArray result=rpc("get-job-info",new JSONObject().put("job-id",id)).getJSONArray("result");
+        Object raw=rpc("get-job-info",new JSONObject().put("job-id",id)).opt("result");
+        if(raw instanceof JSONObject){int error=((JSONObject)raw).optInt("error-code",0);throw new IOException("查询任务 "+id+"："+JobRecovery.error(error)+"。可在检查出纸后结束本次记录");}
+        if(!(raw instanceof JSONArray))throw new IOException("任务状态返回格式无法识别，原记录已保留");
+        JSONArray result=(JSONArray)raw;
+        if(result.length()==0)throw new IOException("打印机已找不到任务 "+id+"，结果未确认；请检查出纸后结束本次记录");
         if(result.length()!=1||result.getJSONObject(0).optInt("job-id",-1)!=id)throw new IOException("任务状态无法确认，请检查打印机");
         return result.getJSONObject(0);
     }

@@ -8,6 +8,7 @@ import struct
 import zlib
 from PIL import Image
 from .bluetooth_client import BluetoothClient
+from .errors import describe as describe_errors, code as describe_code
 from .platform import sync_directory
 
 
@@ -19,6 +20,7 @@ def terminal_message(info):
     state=info.get('job-state')
     if state==9:return '打印完成'
     if state==8:return '任务已取消'
+    if info.get('error-code'):return describe_code(info['error-code'])
     expected,received=info.get('file-size'),info.get('transfer-size')
     if state==7 and info.get('transfer-status')==3 and type(expected) is int and type(received) is int and expected>received>=0:
         return f'传输未完成：缺少 {expected-received} 字节（已接收 {received}/{expected}）；不会自动重印'
@@ -99,8 +101,10 @@ class BluetoothPrinter:
             raise RuntimeError('上次蓝牙打印结果未确认，请先核对打印机和 bluetooth-state 中的任务记录；不会自动重印')
         status = self.get_prop('printer-state-alerts', 'media-size')
         jobs = self.client.rpc('get-job-id-list', {})
-        if status[0] != '::0' or status[1].get('media-size') != (5012 if media_size == 5014 else media_size) or jobs.get('job-id-list') not in ('', []):
-            raise RuntimeError('请检查相纸、耗材和打印机队列')
+        alert=describe_errors(status[0])
+        if alert:raise RuntimeError('照片尚未提交：'+alert)
+        if status[1].get('media-size') != (5012 if media_size == 5014 else media_size):raise RuntimeError('纸盒与选择的相纸不一致，请核对后重试')
+        if jobs.get('job-id-list') not in ('',[]):raise RuntimeError('打印机仍有任务，请等待当前任务结束')
         record = {'phase': 'creating'}
         if on_state:on_state(dict(record))
         self._record(record, create=True)
@@ -109,7 +113,8 @@ class BluetoothPrinter:
             'media-size': media_size, 'channel': 576, 'sharpenmode': sharpen,
         })
         job = result.get('job-id', result.get('job_id'))
-        if result.get('error-code', 0) != 0 or type(job) is not int or job <= 0:
+        if result.get('error-code',0):raise RuntimeError('打印机拒绝任务：'+describe_code(result['error-code'])+'；请核对原任务，不会自动重试')
+        if type(job) is not int or job <= 0:
             raise RuntimeError('蓝牙任务未确认；保留记录，不自动重试')
         record.update(phase='uploading', job=job)
         self._record(record)
@@ -126,16 +131,29 @@ class BluetoothPrinter:
             if on_cancel and on_cancel() and not cancel_sent:
                 self.client.rpc("cancel-job", {"job-id":job});cancel_sent=True
             infos = self.client.rpc('get-job-info', {'job-id': job})
+            if isinstance(infos,dict) and infos.get('error-code'):raise RuntimeError('查询原任务失败：'+describe_code(infos['error-code']))
             matches = [i for i in infos if i.get('job-id') == job]
             if len(matches) != 1:
                 raise RuntimeError('打印状态未确认；保留记录，不自动重试')
             info = matches[0]
             state = info.get('job-state')
             if on_progress:on_progress(dict(stage='waiting',device=terminal_info(info),sampleAt=int(time.time()*1000)))
+            if state == 5:
+                values=self.get_prop('printer-state-alerts','ribbon-info')
+                record.update(phase='held',job=job,info=terminal_info(info),alert=values[0],ribbon=values[1].get('ribbon-info',[0,0,-1])[2])
+                self._record(record)
+                if on_state:on_state(dict(record))
+                raise RuntimeError('打印机暂停：'+describe_errors(record['alert'])+'；色带余量 '+str(record['ribbon'])+' 张；请检查设备后核对原任务')
             if state in (7, 8, 9):
                 self.last_state=state;self.last_info=terminal_info(info)
+                message=terminal_message(self.last_info)
+                if state==7:
+                    try:
+                        alert=describe_errors(self.get_prop('printer-state-alerts')[0])
+                        if alert:message+='；'+alert
+                    except Exception:pass
                 self.intent.unlink()
-                if on_state:on_state(dict(phase={9:'done',8:'cancelled',7:'aborted'}[state],job=job,info=self.last_info,message=terminal_message(self.last_info)))
+                if on_state:on_state(dict(phase={9:'done',8:'cancelled',7:'aborted'}[state],job=job,info=self.last_info,message=message))
                 log('打印完成' if state == 9 else '打印已中止')
                 return state == 9
             time.sleep(2)

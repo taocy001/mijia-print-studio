@@ -3,6 +3,7 @@ import hashlib, json, logging, os, queue, re, secrets, struct, subprocess, tempf
 from pathlib import Path
 from Crypto.Cipher import AES
 from PIL import Image
+from .errors import PrinterResponseError
 from .platform import open_lock, lock_exclusive, user_id, transport_command
 
 def frame(ch,op,enc,seq,body,total=0,number=0):
@@ -128,7 +129,9 @@ class BluetoothClient:
         if method=='get-job-info':req['isNewSpec']=1
         self.send(frame(3,6,3,seq,crypt(self.key,json.dumps(req,separators=(',',':')).encode())))
         answer=json.loads(crypt(self.key,self.receive(3,7),False).rstrip(b'\0'))
-        if answer.get('id')!=seq or 'error' in answer:raise ValueError('Bluetooth RPC rejected or mismatched')
+        if answer.get('id')!=seq:raise ValueError('Bluetooth RPC response mismatched')
+        if 'error' in answer:
+            error=answer['error'];raise PrinterResponseError(error.get('code','UNKNOWN') if isinstance(error,dict) else error)
         return answer['result']
     def upload(self,job,data,progress=None):
         self.phase = 'photo upload'

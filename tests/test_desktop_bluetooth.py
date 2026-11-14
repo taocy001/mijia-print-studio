@@ -140,6 +140,40 @@ class WebBluetoothTests(unittest.TestCase):
         with self.assertRaises(RuntimeError): self.printer.print_photo([self.photo])
         self.assertEqual(len([c for c in self.calls if c[0] == 'print-job']), 1)
 
+    def test_pause_persists_alert_without_resending(self):
+        self.state=5;original=self.rpc;records=[]
+        def rpc(method,params):
+            if method=='get_prop' and params==['printer-state-alerts','ribbon-info']:return ['::5402',{'ribbon-info':[2,1,31]}]
+            return original(method,params)
+        self.rpc=rpc
+        with self.assertRaisesRegex(RuntimeError,'5402'):
+            self.printer.print_photo([self.photo],log=lambda _:None,on_state=records.append)
+        saved=json.loads(self.printer.intent.read_text())
+        self.assertEqual(saved['alert'],'::5402');self.assertEqual(saved['ribbon'],31)
+        self.assertEqual(saved['info']['job-state'],5);self.assertEqual(records[-1]['phase'],'held')
+        self.assertEqual(sum(method=='print-job' for method,_ in self.calls),1)
+
+    def test_power_fault_stops_before_creating_job(self):
+        original=self.rpc
+        def rpc(method,params):
+            if method=='get_prop':return ['::9008',{'media-size':5012}]
+            return original(method,params)
+        self.rpc=rpc
+        with self.assertRaisesRegex(RuntimeError,'Type-C 供电不足'):
+            self.printer.print_photo([self.photo],log=lambda _:None)
+        self.assertFalse(self.printer.intent.exists())
+        self.assertEqual(sum(method=='print-job' for method,_ in self.calls),0)
+    def test_task_rejection_explains_code_without_retry(self):
+        original=self.rpc
+        def rpc(method,params):
+            if method=='print-job':self.calls.append((method,params));return {'error-code':8208}
+            return original(method,params)
+        self.rpc=rpc
+        with self.assertRaisesRegex(RuntimeError,'供电不足'):
+            self.printer.print_photo([self.photo],log=lambda _:None)
+        self.assertEqual(sum(method=='print-job' for method,_ in self.calls),1)
+        self.assertTrue(self.printer.intent.exists())
+
     def test_canceled_is_not_success(self):
         self.state = 7
         self.assertFalse(self.printer.print_photo([self.photo], log=lambda _: None))

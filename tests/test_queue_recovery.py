@@ -11,7 +11,7 @@ class Printer:
     def __init__(self,root):self.intent=root/'intent.json';self.client=self;self.calls=0
     def close(self):pass
     def get_prop(self,*args):return ['30','::0',{'media-size':5012},{'ribbon-info':[0,0,20]}]
-    def rpc(self,method,args):return [{'job-id':args['job-id'],'job-state':9}]
+    def rpc(self,method,args):return {'job-id-list':''} if method=='get-job-id-list' else [{'job-id':args['job-id'],'job-state':9}]
     def print_photo(self,files,**kw):
         self.calls+=1;cb=kw['on_state'];cb({'phase':'creating'})
         self.intent.write_text(json.dumps({'job':self.calls}));cb({'phase':'uploading','job':self.calls})
@@ -98,6 +98,24 @@ class Queue(unittest.IsolatedAsyncioTestCase):
     async def test_other_owner_cannot_reconcile(self):
         await self.run_job();await self.core.reconcile({'id':'b'})
         self.assertEqual(self.job['phase'],'uncertain');self.assertTrue(self.printer.intent.exists())
+    async def test_resolve_rejects_live_queue_and_preserves_record(self):
+        await self.run_job()
+        with patch.object(self.printer,'rpc',return_value={'job-id-list':'2'}):
+            with self.assertRaisesRegex(UserError,'仍有任务'):await self.core.resolve({'id':'a'},'batch',True)
+        self.assertEqual(self.job['phase'],'uncertain');self.assertTrue(self.core.paused)
+        self.assertEqual(self.printer.calls,2)
+    async def test_resolve_offline_cannot_unlock(self):
+        await self.run_job()
+        with patch.object(self.printer,'get_prop',side_effect=OSError('offline')):
+            with self.assertRaises(OSError):await self.core.resolve({'id':'a'},'batch',True)
+        self.assertEqual(self.job['phase'],'uncertain');self.assertTrue(self.core.paused)
+    async def test_missing_job_can_be_closed_without_reprinting(self):
+        await self.run_job()
+        with patch.object(self.printer,'rpc',return_value=[]):
+            with self.assertRaisesRegex(UserError,'找不到原任务'):await self.core.reconcile({'id':'a'})
+        await self.core.resolve({'id':'a'},'batch',True)
+        self.assertEqual(self.job['phase'],'cancelled');self.assertFalse(self.core.paused)
+        self.assertEqual(self.printer.calls,2);self.assertTrue(self.job['resolution']['queueEmpty'])
     async def test_resolve_requires_explicit_confirmation_and_idle(self):
         await self.run_job()
         with self.assertRaises(UserError):await self.core.resolve({'id':'a'},'batch',1)

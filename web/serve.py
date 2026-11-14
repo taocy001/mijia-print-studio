@@ -5,6 +5,7 @@ from aiohttp import web
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from printing.images import decode,cutout,UserError
+from printing.errors import PrinterResponseError
 from printing.faces import detect_faces
 from printing.models import ModelStore
 from printing.identity import sharing_name
@@ -162,7 +163,7 @@ class Studio:
 async def responses(request,handler):
     try:response=await handler(request)
     except web.HTTPException as error:response=error
-    except UserError as error:response=web.json_response({'error':str(error)},status=409)
+    except (UserError,PrinterResponseError) as error:response=web.json_response({'error':str(error)},status=409)
     except (ValueError,KeyError,TypeError):response=web.json_response({'error':'请求无效，请检查图片和参数'},status=409)
     except Exception:response=web.json_response({'error':'操作未完成，请检查服务端和设备状态'},status=409)
     response.headers.update(HEADERS);return response
