@@ -24,7 +24,7 @@ class Studio:
         try:self.owners=json.loads((self.data/'web-owners.json').read_text())
         except FileNotFoundError:self.owners={}
         self.pairings=Pairings(self.data)
-        self.code=f'{secrets.randbelow(1000000):06}';self.sessions={};self.failures=0;self.blocked_until=0
+        self.code=f'{secrets.randbelow(1000000):06}';self.sessions={};self.failures=0;self.blocked_until=0;self.local_session=None
     def remember(self,session):
         self.owners[session['ownerKey']]={'id':session['id'],'files':sorted(session['files']),'bytes':session['bytes']}
         atomic(self.data/'web-owners.json',self.owners)
@@ -47,6 +47,12 @@ class Studio:
     async def stop(self,app):
         await self.models.close()
         if self.owns_core:await self.core.stop(app)
+    @staticmethod
+    def local_request(r):
+        # Trust the socket endpoints, never Host or forwarded headers.
+        peer=r.transport.get_extra_info('peername')
+        local=r.transport.get_extra_info('sockname')
+        return bool(peer and local and ipaddress.ip_address(peer[0]).is_loopback and ipaddress.ip_address(local[0]).is_loopback)
     async def handle(self,r):
         if r.method not in ('GET','POST'):raise web.HTTPMethodNotAllowed(r.method,['GET','POST'])
         address,port=r.transport.get_extra_info('sockname')[:2];allowed={f'{address}:{port}'}
@@ -60,22 +66,29 @@ class Studio:
             owner=r.cookies.get('liuying-owner','')
             if not re.fullmatch('[A-Za-z0-9_-]{64}',owner):owner=secrets.token_urlsafe(48)
             owner_key=hashlib.sha256(owner.encode()).hexdigest()
-            if time.monotonic()<self.blocked_until or not self.pairings.available(owner_key) or not code.isascii() or not secrets.compare_digest(code,self.code):
+            if time.monotonic()<self.blocked_until:
+                seconds=max(1,int(self.blocked_until-time.monotonic())+1)
+                return web.Response(text=self.pair_page(f'尝试过于频繁，请 {seconds} 秒后重试'),content_type='text/html',status=429,headers={'Retry-After':str(seconds)})
+            if not isinstance(code,str) or not code.isascii() or not secrets.compare_digest(code,self.code):
                 self.failures+=1
                 if self.failures>=5:self.blocked_until=time.monotonic()+60;self.failures=0
-                return web.Response(text=self.pair_page('配对码不正确或请求过多，请稍后重试'),content_type='text/html',status=403)
+                return web.Response(text=self.pair_page('配对码不正确，请查看服务端当前显示的 6 位配对码'),content_type='text/html',status=403)
             token=secrets.token_urlsafe(48);session=next((value for value in self.sessions.values() if value.get('ownerKey')==owner_key),None)
             if session is None:session=self.restore(owner_key)
             self.remember(session);self.pairings.grant(token,owner_key)
             self.sessions={key:value for key,value in self.sessions.items() if self.pairings.find(key)}
             self.sessions[token]=session;self.failures=0
             response=web.HTTPSeeOther('/');response.set_cookie('liuying',token,httponly=True,samesite='Lax',max_age=LIFETIME);response.set_cookie('liuying-owner',owner,httponly=True,samesite='Lax',max_age=LIFETIME);return response
+        can_manage=self.local_request(r)
         session=self.session(r.cookies.get('liuying'))
+        if not session and can_manage:
+            if self.local_session is None:
+                self.local_session=self.restore(hashlib.sha256(b'liuying-local-host').hexdigest())
+                self.remember(self.local_session)
+            session=self.local_session
         if not session:
             if r.path=='/' and r.method=='GET':return web.Response(text=self.pair_page('输入服务端显示的配对码'),content_type='text/html')
             return web.json_response({'error':'请重新配对'},status=401)
-        peer=r.transport.get_extra_info('peername')
-        can_manage=bool(peer and ipaddress.ip_address(peer[0]).is_loopback)
         if r.path.startswith('/api/admin/') and not can_manage:raise web.HTTPForbidden()
         if r.method=='GET':
             if r.path=='/api/models':return web.json_response(dict(await self.models.status(),canManage=can_manage))
@@ -100,14 +113,14 @@ class Studio:
             if r.path=='/session.js':
                 response=web.Response(text='window.STUDIO_DRAFT_KEY='+json.dumps('liuying-draft-'+session['id'])+';',content_type='application/javascript')
                 token=r.cookies.get('liuying');grant=self.pairings.find(token)
-                response.set_cookie('liuying',token,httponly=True,samesite='Lax',max_age=max(0,int(grant['expires']-time.time())))
+                if grant:response.set_cookie('liuying',token,httponly=True,samesite='Lax',max_age=max(0,int(grant['expires']-time.time())))
                 return response
             if r.path.startswith('/private/'):
                 if r.path not in session['files']:raise web.HTTPNotFound()
                 return web.FileResponse(self.data/r.path[9:])
             name=r.path.lstrip('/') or 'index.html';path=ROOT/'assets'/name
-            if not (re.fullmatch(r'[a-z0-9-]+\.(js|css|html)',name) or name=='sample.svg' or re.fullmatch(r'emoji/[a-f0-9-]+\.svg',name) or name in ('fonts/MaShanZheng-Regular.ttf','fonts/ZCOOLKuaiLe-Regular.ttf')) or not path.is_file():raise web.HTTPNotFound()
-            return web.FileResponse(path)
+            if not (re.fullmatch(r'[a-z0-9-]+\.(js|css|html)',name) or name in ('sample.svg','booth-mascots.webp') or re.fullmatch(r'emoji/[a-f0-9-]+\.svg',name) or name in ('fonts/MaShanZheng-Regular.ttf','fonts/ZCOOLKuaiLe-Regular.ttf')) or not path.is_file():raise web.HTTPNotFound()
+            return web.FileResponse(path,headers={'Content-Type':'image/webp'} if name=='booth-mascots.webp' else None)
         if r.path=='/api/upload':
             data=await r.read()
             if session['bytes']+len(data)>120*1024*1024 or session['uploads']>=60:raise UserError('照片已达本次会话上限')
@@ -121,7 +134,7 @@ class Studio:
         body=json.loads(raw)
         if r.path=='/api/admin/pairing/reset':
             token=r.cookies.get('liuying');self.pairings.reset(token)
-            self.sessions={token:session};previous=self.code
+            self.sessions={token:session} if self.pairings.find(token) else {};previous=self.code
             while self.code==previous:self.code=f'{secrets.randbelow(1000000):06}'
             self.failures=0;self.blocked_until=0
             print('配对码：'+self.code,flush=True)

@@ -147,7 +147,8 @@ class Browser(unittest.IsolatedAsyncioTestCase):
         self.studio.core.jobs.append(dict(owner=session['id'],token='old',phase='rejected',file='photos/test.jpg',pages=[{'file':'photos/test.jpg','media':5009}]));self.studio.core.save()
         await self.client.close();await self.start_server()
         try:
-            r=await self.client.get('/api/state',headers={'Cookie':'liuying-owner='+owner});self.assertEqual(r.status,401)
+            with patch.object(Studio,'local_request',return_value=False):
+                r=await self.client.get('/api/state',headers={'Cookie':'liuying-owner='+owner});self.assertEqual(r.status,401)
             await self.pair(owner)
             r=await self.client.get('/api/state');state=await r.json();self.assertEqual(state['history'][0]['phase'],'rejected');self.assertTrue(state['canManageQueue'])
             r=await self.client.get('/private/photos/test.jpg');self.assertEqual(r.status,200)

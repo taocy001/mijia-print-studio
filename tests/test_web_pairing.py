@@ -11,6 +11,7 @@ from web.pairing import Pairings,LIFETIME
 class Pairing(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        self.remote=patch.object(Studio,"local_request",return_value=False);self.remote.start();self.addCleanup(self.remote.stop)
         await self.start()
     async def start(self):
         self.studio=Studio(self.tmp.name,True)
@@ -74,7 +75,8 @@ class Pairing(unittest.IsolatedAsyncioTestCase):
         with patch('web.serve.ipaddress.ip_address',return_value=SimpleNamespace(is_loopback=False)):
             r=await self.client.get('/api/sharing',headers=self.headers(b));value=await r.json();self.assertEqual(value['code'],old_code);self.assertFalse(value['canManagePairing'])
             r=await self.client.post('/api/admin/pairing/reset',json={},headers=self.headers(b));self.assertEqual(r.status,403)
-        r=await self.client.post('/api/admin/pairing/reset',json={},headers=self.headers(a));self.assertEqual(r.status,200);self.assertNotEqual(old_code,self.studio.code)
+        with patch.object(Studio,'local_request',return_value=True):
+            r=await self.client.post('/api/admin/pairing/reset',json={},headers=self.headers(a));self.assertEqual(r.status,200);self.assertNotEqual(old_code,self.studio.code)
         self.assertEqual((await self.client.get('/api/sharing',headers=self.headers(a))).status,200)
         self.assertEqual((await self.client.get('/api/sharing',headers=self.headers(b))).status,401)
         r=await self.client.post('/api/pair',data={'code':old_code},headers=self.headers(b),allow_redirects=False);self.assertEqual(r.status,403)
@@ -83,16 +85,46 @@ class Pairing(unittest.IsolatedAsyncioTestCase):
         a=await self.pair();old_code=self.studio.code;records=dict(self.studio.pairings.records)
         with patch('web.pairing.atomic',side_effect=OSError('disk full')):
             r=await self.client.post('/api/pair',data={'code':old_code},headers={'Origin':self.origin},allow_redirects=False);self.assertEqual(r.status,409);self.assertNotIn('liuying',r.cookies)
-            r=await self.client.post('/api/admin/pairing/reset',json={},headers=self.headers(a));self.assertEqual(r.status,409)
+            with patch.object(Studio,'local_request',return_value=True):
+                r=await self.client.post('/api/admin/pairing/reset',json={},headers=self.headers(a));self.assertEqual(r.status,409)
         self.assertEqual(records,self.studio.pairings.records);self.assertEqual(old_code,self.studio.code);self.assertIsNotNone(self.studio.session(a[0]))
     async def test_repair_same_browser_replaces_old_token_and_limit_expires(self):
         a=await self.pair();again=await self.pair(a[1]);self.assertIsNone(self.studio.session(a[0]));self.assertEqual(len(self.studio.pairings.live()),1)
-        for _ in range(11):await self.pair()
-        self.assertFalse(self.studio.pairings.available('0'*64));await self.pair(again[1])
+        for _ in range(16):await self.pair()
+        self.assertEqual(len(self.studio.pairings.live()),17);await self.pair(again[1]);self.assertEqual(len(self.studio.pairings.live()),17)
         for record in self.studio.pairings.records.values():record['expires']=0
-        self.assertTrue(self.studio.pairings.available('0'*64));await self.pair();self.assertEqual(len(self.studio.pairings.live()),1)
+        await self.pair();self.assertEqual(len(self.studio.pairings.live()),1)
+    async def test_local_editor_without_pairing_and_persistent_identity(self):
+        with patch.object(Studio,'local_request',return_value=True):
+            r=await self.client.get('/');self.assertEqual(r.status,200);self.assertIn('app.js',await r.text())
+            r=await self.client.get('/api/sharing');self.assertTrue((await r.json())['canManagePairing'])
+            r=await self.client.get('/session.js');self.assertEqual(r.status,200);identity=await r.text()
+            self.assertEqual(len(self.studio.pairings.live()),0)
+            await self.client.close();await self.start()
+            self.assertEqual(await (await self.client.get('/session.js')).text(),identity)
+            self.assertEqual((await self.client.post('/api/admin/pairing/reset',json={},headers=self.headers())).status,200)
+            self.assertEqual((await self.client.post('/api/admin/pairing/reset',json={},headers={'Origin':'http://outside.test'})).status,403)
+        for path in ['/api/sharing','/session.js']:
+            r=await self.client.get(path,headers={'X-Forwarded-For':'127.0.0.1'});self.assertEqual(r.status,401)
+
+    async def test_wrong_code_and_cooldown_are_distinct_and_do_not_extend_lockout(self):
+        for _ in range(5):
+            r=await self.client.post('/api/pair',data={'code':'wrong'},headers=self.headers());self.assertEqual(r.status,403);self.assertIn('配对码不正确',await r.text())
+        deadline=self.studio.blocked_until
+        r=await self.client.post('/api/pair',data={'code':self.studio.code},headers=self.headers());self.assertEqual(r.status,429);self.assertIn('Retry-After',r.headers)
+        self.assertEqual(self.studio.blocked_until,deadline)
+        self.studio.blocked_until=0
+        await self.pair()
+
     async def test_corrupt_grant_file_does_not_authorize_owners(self):
         await self.pair();self.studio.pairings.path.write_text('[]')
         with self.assertRaises(ValueError):Pairings(Path(self.tmp.name))
+
+class SocketTrust(unittest.TestCase):
+    def test_only_real_loopback_endpoints_are_local(self):
+        for peer,local,expected in [('127.0.0.1','127.0.0.1',True),('::1','::1',True),('192.168.1.2','127.0.0.1',False),('127.0.0.1','192.168.1.3',False)]:
+            endpoints={'peername':(peer,12345),'sockname':(local,8633)}
+            request=SimpleNamespace(transport=SimpleNamespace(get_extra_info=endpoints.get),headers={'X-Forwarded-For':'127.0.0.1','Host':'localhost'})
+            self.assertEqual(Studio.local_request(request),expected)
 
 if __name__=='__main__':unittest.main()

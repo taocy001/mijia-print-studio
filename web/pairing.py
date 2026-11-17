@@ -24,13 +24,8 @@ class Pairings:
         if not isinstance(token, str) or not re.fullmatch('[A-Za-z0-9_-]{64}', token): return None
         return self.live().get(hashlib.sha256(token.encode()).hexdigest())
 
-    def available(self, owner_key):
-        records = self.live()
-        return len(records) < 12 or any(r['ownerKey'] == owner_key for r in records.values())
-
     def grant(self, token, owner_key):
         records = {key:r for key,r in self.live().items() if r['ownerKey'] != owner_key}
-        if len(records) >= 12: raise ValueError('Browser limit reached')
         records[hashlib.sha256(token.encode()).hexdigest()] = {'ownerKey':owner_key, 'expires':int(time.time())+LIFETIME}
         atomic(self.path, records)
         self.records = records

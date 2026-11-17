@@ -104,7 +104,7 @@ class Models(unittest.IsolatedAsyncioTestCase):
     async def test_api_auth_origin_and_host_only_download(self):
         studio=Studio(core=SimpleNamespace(data=self.root,simulate=True));studio.models=self.store
         studio.pairings.grant('T'*64,'a'*64);studio.sessions['T'*64]={'id':'test'}
-        response=await studio.handle(self.request('/api/models',paired=False));self.assertEqual(response.status,401)
+        response=await studio.handle(self.request('/api/models',peer='192.168.1.2',paired=False));self.assertEqual(response.status,401)
         response=await studio.handle(self.request('/api/models',peer='192.168.1.2'))
         self.assertFalse(json.loads(response.text)['canManage'])
         with self.assertRaises(web.HTTPForbidden):
