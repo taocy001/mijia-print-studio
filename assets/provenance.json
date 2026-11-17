@@ -328,5 +328,10 @@
     "path": "assets/qrcodegen.js",
     "source": "https://github.com/nayuki/QR-Code-generator/releases/download/v1.8.0/qrcodegen-v1.8.0-es6.js",
     "sha256": "6a1116192ed1dd67fa1bf31e77f5817103d71c23bbac24c382e698b7668bdd01"
+  },
+  {
+    "path": "assets/booth-mascots.webp",
+    "source": "Original mascot artwork generated for Liuying Studio with OpenAI image generation, 2026-11-15",
+    "sha256": "65fa42486240ec4f26ec66727bc45c508fffa8f2c15703ead185e4387eebfba3"
   }
 ]

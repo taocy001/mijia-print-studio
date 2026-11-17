@@ -24,7 +24,8 @@ public final class MainActivity extends Activity {
     private final Handler main=new Handler(Looper.getMainLooper());
     private final java.util.concurrent.atomic.AtomicBoolean cutting=new java.util.concurrent.atomic.AtomicBoolean();
     private boolean picking,sharingAirPrint;
-    private int pickLimit=6;
+    private GalleryPicker galleryPicker;
+    private int pickLimit=12;
     private ValueCallback<Uri[]> textFileCallback;
     private final java.util.concurrent.atomic.AtomicBoolean savingProject=new java.util.concurrent.atomic.AtomicBoolean();
     private volatile byte[] pendingProject;
@@ -60,7 +61,7 @@ public final class MainActivity extends Activity {
                     }else{
                         String name=path.equals("/")?"index.html":path.substring(1);
                         if(!AssetPolicy.allows(name))throw new IOException();
-                        input=getAssets().open(name);mime=name.endsWith(".jpg")?"image/jpeg":name.endsWith(".png")?"image/png":name.endsWith(".js")?"application/javascript":name.endsWith(".css")?"text/css":name.endsWith(".svg")?"image/svg+xml":name.endsWith(".ttf")?"font/ttf":"text/html";
+                        input=getAssets().open(name);mime=name.endsWith(".webp")?"image/webp":name.endsWith(".jpg")?"image/jpeg":name.endsWith(".png")?"image/png":name.endsWith(".js")?"application/javascript":name.endsWith(".css")?"text/css":name.endsWith(".svg")?"image/svg+xml":name.endsWith(".ttf")?"font/ttf":"text/html";
                     }
                     Map<String,String> headers=new HashMap<>();headers.put("Cache-Control","no-store");headers.put("X-Content-Type-Options","nosniff");
                     headers.put("Content-Security-Policy","default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'");
@@ -128,10 +129,10 @@ public final class MainActivity extends Activity {
         PrinterStatus.refresh(this,true);
     }
     private final Runnable statusTick=new Runnable(){public void run(){if(granted())PrinterStatus.refresh(MainActivity.this,false);main.postDelayed(this,15000);}};
-    @Override protected void onResume(){super.onResume();main.removeCallbacks(statusTick);main.post(statusTick);}
+    @Override protected void onResume(){super.onResume();if(galleryPicker!=null)galleryPicker.refresh();main.removeCallbacks(statusTick);main.post(statusTick);}
     @Override protected void onPause(){main.removeCallbacks(statusTick);super.onPause();}
 
-    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==9&&granted())startSharingService();if(request==7){if(granted())check();else event("toast","需要附近设备权限才能连接打印机");}}
+    @Override public void onRequestPermissionsResult(int request,String[] permissions,int[] results){super.onRequestPermissionsResult(request,permissions,results);if(request==15&&galleryPicker!=null)galleryPicker.refresh();if(request==9&&granted())startSharingService();if(request==7){if(granted())check();else event("toast","需要附近设备权限才能连接打印机");}}
     private void startSharingService(){
         if(Build.VERSION.SDK_INT>=33&&checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},8);
         try{startForegroundService(new Intent(this,SharingService.class).setAction(sharingAirPrint?"airprint":"web"));}catch(RuntimeException e){event("toast","请解锁手机并保持 App 在前台，再开启共享");}
@@ -144,6 +145,7 @@ public final class MainActivity extends Activity {
     }
     @Override public void onConfigurationChanged(android.content.res.Configuration configuration){
         super.onConfigurationChanged(configuration);
+        if(galleryPicker!=null)galleryPicker.resized();
         updateSystemTheme();
         if(web!=null)web.post(()->web.evaluateJavascript("window.updateEditorOrientation&&window.updateEditorOrientation()",null));
     }
@@ -233,16 +235,15 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public void bluetoothSettings(){main.post(()->startActivity(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS)));}
         @JavascriptInterface public void pick(int remaining){main.post(()->{
             if(picking)return;
-            if(remaining<1){event("toast","最多选择 6 张照片");return;}
-            pickLimit=Math.min(6,remaining);picking=true;
-            if(Build.VERSION.SDK_INT>=33){
-                Intent picker=new Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*");
-                if(pickLimit>1)picker.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX,Math.min(pickLimit,MediaStore.getPickImagesMaxLimit()));
-                try{startActivityForResult(picker,10);return;}catch(ActivityNotFoundException ignored){}
-            }
-            Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,pickLimit>1);
-            try{startActivityForResult(intent,10);event("toast","长按照片可多选，本次最多选择 "+pickLimit+" 张");}
-            catch(Exception e){picking=false;event("toast","无法打开照片选择器");}
+            if(remaining<1){event("toast","照片已满，请先移除一张照片");return;}
+            pickLimit=Math.min(12,remaining);picking=true;
+            galleryPicker=new GalleryPicker(MainActivity.this,pickLimit,new GalleryPicker.Listener(){
+                public void closed(){picking=false;galleryPicker=null;}
+                public void photos(ArrayList<Uri> uris){importPhotos(uris,10);}
+                public void camera(){if(web!=null)web.evaluateJavascript("window.PhotoCapture&&PhotoCapture.start()",null);}
+                public void system(){picking=true;openSystemPhotoPicker();}
+            });
+            galleryPicker.show();
         });}
         @JavascriptInterface public String cutout(String source){
             if(!cutting.compareAndSet(false,true))return "{\"error\":\"正在处理另一张照片，请稍候\"}";
@@ -300,6 +301,16 @@ public final class MainActivity extends Activity {
                 }).show();
         });}
     }
+    private void openSystemPhotoPicker(){
+            if(Build.VERSION.SDK_INT>=33){
+                Intent picker=new Intent(MediaStore.ACTION_PICK_IMAGES).setType("image/*");
+                if(pickLimit>1)picker.putExtra(MediaStore.EXTRA_PICK_IMAGES_MAX,Math.min(pickLimit,MediaStore.getPickImagesMaxLimit()));
+                try{startActivityForResult(picker,10);return;}catch(ActivityNotFoundException ignored){}
+            }
+            Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("image/*").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE,pickLimit>1);
+            try{startActivityForResult(intent,10);event("toast","长按照片可多选，本次最多选择 "+pickLimit+" 张");}
+            catch(Exception e){picking=false;event("toast","无法打开照片选择器");}
+    }
     @Override protected void onActivityResult(int request,int result,Intent data){
         super.onActivityResult(request,result,data);
         if(request==14){receiveCapture(result==RESULT_OK,null);return;}
@@ -323,6 +334,9 @@ public final class MainActivity extends Activity {
         int limit=request==11?1:pickLimit;
         if(data.getClipData()!=null&&data.getClipData().getItemCount()>limit){event("toast","本次最多选择 "+limit+" 张照片，请重新选择");return;}
         ArrayList<Uri> uris=new ArrayList<>();if(data.getClipData()!=null){for(int i=0;i<data.getClipData().getItemCount();i++)uris.add(data.getClipData().getItemAt(i).getUri());}else if(data.getData()!=null)uris.add(data.getData());
+        importPhotos(uris,request);
+    }
+    private void importPhotos(ArrayList<Uri> uris,int request){
         event("loading",true);
         new Thread(()->{
             JSONArray imported=new JSONArray();
@@ -341,5 +355,5 @@ public final class MainActivity extends Activity {
         },"liuying-import").start();
     }
     @Override public void onBackPressed(){web.evaluateJavascript("window.goBack?window.goBack():false",value->{if(!"true".equals(value))super.onBackPressed();});}
-    @Override protected void onDestroy(){captureWebReady=false;pendingProject=null;savingProject.set(false);if(textFileCallback!=null){textFileCallback.onReceiveValue(null);textFileCallback=null;}if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){if(galleryPicker!=null)galleryPicker.dismiss();captureWebReady=false;pendingProject=null;savingProject.set(false);if(textFileCallback!=null){textFileCallback.onReceiveValue(null);textFileCallback=null;}if(web!=null){web.removeJavascriptInterface("Studio");web.destroy();web=null;}super.onDestroy();}
 }

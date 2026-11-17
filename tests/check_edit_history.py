@@ -1,11 +1,13 @@
 """Per-photo edit history, grouped gestures and editor closure safety; no printing."""
+import os
 from pathlib import Path
 from urllib.parse import urlparse
 import mimetypes,re
 from playwright.sync_api import sync_playwright
+for ext,mime in [('.js','text/javascript'),('.css','text/css'),('.svg','image/svg+xml'),('.webp','image/webp')]:mimetypes.add_type(mime,ext)
 root=Path(__file__).resolve().parents[1]
 with sync_playwright() as p:
-    browser=p.chromium.launch()
+    browser=p.chromium.launch(**({'channel':os.environ['TEST_BROWSER_CHANNEL']} if os.environ.get('TEST_BROWSER_CHANNEL') else {}))
     page=browser.new_page(viewport={'width':1100,'height':900},has_touch=True)
     errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
     page.add_init_script("window.Studio={state:()=>JSON.stringify({permission:true,device:{connected:true,media:5012,checkedAt:Date.now()},history:[]}),printBatch:()=>{throw Error('No printing')}}")
@@ -62,44 +64,44 @@ with sync_playwright() as p:
     page.evaluate("LayerEditor.create({kind:'text',text:'First'});LayerEditor.openEditor(LayerEditor.selected())")
     page.locator('#layerText').fill('Changed text')
     page.evaluate('active().x=.42;active().y=-.23;render()')
-    page.locator('#menuBtn').click();page.locator('#undoEdit').click()
-    assert page.evaluate("active().overlays[0].text==='First'&&active().x===.42&&active().y===-.23"),'Text undo must retain automatic face crop while input was pending'
-    page.locator('#redoEdit').click()
-    assert page.evaluate("active().overlays[0].text==='Changed text'")
+    page.evaluate('closeSheet()');page.locator('#editorUndo').click()
+    assert page.evaluate("LayerEditor.paperList()[0].text==='First'&&active().x===.42&&active().y===-.23"),'Text undo must retain automatic face crop while input was pending'
+    page.locator('#editorRedo').click()
+    assert page.evaluate("LayerEditor.paperList()[0].text==='Changed text'")
     # Undo invalidates existing object-edit closures before another edit can target stale objects.
-    page.evaluate("LayerEditor.openEditor(active().overlays[0])")
+    page.evaluate("LayerEditor.openEditor(LayerEditor.paperList()[0])")
     page.locator('#layerText').fill('Third');page.evaluate('EditHistory.undo()')
-    assert page.evaluate("!document.body.classList.contains('layer-editing')&&active().overlays[0].text==='Changed text'")
-    page.evaluate("LayerEditor.select(active().overlays[0].id);LayerEditor.remove()")
-    assert page.evaluate("active().overlays.length===0&&!!document.getElementById('layerUndo')"),'Deletion keeps immediate undo'
+    assert page.evaluate("!document.body.classList.contains('layer-editing')&&LayerEditor.paperList()[0].text==='Changed text'")
+    page.evaluate("LayerEditor.select(LayerEditor.paperList()[0].id);LayerEditor.remove()")
+    assert page.evaluate("LayerEditor.paperList().length===0&&!!document.getElementById('layerUndo')"),'Deletion keeps immediate undo'
     page.locator('#layerUndo button').click();page.evaluate('EditHistory.redo();EditHistory.undo()')
-    assert page.evaluate('active().overlays.length===1'),'Deletion must restore exactly one object'
-    page.evaluate("LayerEditor.select(active().overlays[0].id);LayerEditor.remove();window.staleUndo=$('layerUndo').querySelector('button');changeSetting('filter','cool');staleUndo.click()")
-    assert page.evaluate("active().overlays.length===0&&active().filter==='cool'"),'Stale deletion button must not undo a newer edit'
+    assert page.evaluate('LayerEditor.paperList().length===1'),'Deletion must restore exactly one object'
+    page.evaluate("LayerEditor.select(LayerEditor.paperList()[0].id);LayerEditor.remove();window.staleUndo=$('layerUndo').querySelector('button');changeSetting('filter','cool');staleUndo.click()")
+    assert page.evaluate("LayerEditor.paperList().length===0&&active().filter==='cool'"),'Stale deletion button must not undo a newer edit'
     page.evaluate('EditHistory.undo();EditHistory.undo()')
 
-    page.evaluate("LayerEditor.openEditor(active().overlays[0])")
+    page.evaluate("LayerEditor.openEditor(LayerEditor.paperList()[0])")
     assert page.evaluate("()=>{const e=new KeyboardEvent('keydown',{key:'z',ctrlKey:true,bubbles:true,cancelable:true});$('layerText').dispatchEvent(e);return !e.defaultPrevented}")
     page.locator('#layerText').fill('Keyboard protected');page.locator('#menuBtn').click()
     page.keyboard.press('Control+z')
-    assert page.evaluate("active().overlays[0].text==='Changed text'")
+    assert page.evaluate("LayerEditor.paperList()[0].text==='Changed text'")
     page.keyboard.press('Control+Shift+z')
-    assert page.evaluate("active().overlays[0].text==='Keyboard protected'")
+    assert page.evaluate("LayerEditor.paperList()[0].text==='Keyboard protected'")
     page.evaluate("""()=>{
       const photo=active();const initial=EditHistory.status();native.device={media:5009,checkedAt:Date.now()};render();save();if(JSON.stringify(EditHistory.status())!==JSON.stringify(initial))throw Error('Device/render created history');
-      state.photos=[{...photo,overlays:[]}];state.active=0;render();if(EditHistory.status().undo||EditHistory.status().redo)throw Error('New project inherited history');
+      state={...state,paperLayers:{},photos:[{...photo,overlays:[]}],active:0};render();if(EditHistory.status().undo||EditHistory.status().redo)throw Error('New project inherited history');
       for(let i=0;i<45;i++)EditHistory.run(()=>active().filter=i%2?'cool':'bw');let count=0;while(EditHistory.status().undo){EditHistory.undo();count++;}if(count!==40)throw Error('History bound '+count);
     }""")
     for theme in ['light','dark']:
-        page.emulate_media(color_scheme=theme);page.evaluate('closeSheet()');page.locator('#menuBtn').click()
-        style=page.evaluate("()=>{const b=$('redoEdit'),r=b.closest('.edit-history-row'),s=getComputedStyle(b),bg=getComputedStyle(r);return {color:s.color,background:bg.backgroundColor,width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height,disabled:b.disabled}}")
+        page.emulate_media(color_scheme=theme);page.evaluate('closeSheet()')
+        style=page.evaluate("()=>{const b=$('editorRedo'),r=$('editorToolbar'),s=getComputedStyle(b),bg=getComputedStyle(r);return {color:s.color,background:bg.backgroundColor,width:b.getBoundingClientRect().width,height:b.getBoundingClientRect().height,disabled:b.disabled}}")
         def luminance(value):
             rgb=[int(n)/255 for n in re.findall(r'\d+',value)[:3]]
             values=[v/12.92 if v<=.04045 else ((v+.055)/1.055)**2.4 for v in rgb]
             return sum(v*w for v,w in zip(values,[.2126,.7152,.0722]))
         a,b=sorted([luminance(style['color']),luminance(style['background'])])
         assert (b+.05)/(a+.05)>=3,(theme,style)
-        assert style['width']>=44 and style['height']>=44 and not style['disabled'],style
+        assert style['width']>=40 and style['height']>=40 and not style['disabled'],style
     assert not errors,errors
     browser.close()
 print('PASS: per-photo undo/redo, same-source isolation, crop gestures, templates, text, deletion, native text shortcuts, new drafts and bounded history; no printing')

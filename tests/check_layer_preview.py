@@ -1,11 +1,13 @@
 """Synthetic editor mask caching and byte-identical full resolution print regression."""
+import os
 from pathlib import Path
 from urllib.parse import urlparse
 import mimetypes
 from playwright.sync_api import sync_playwright
+for ext,mime in [('.js','text/javascript'),('.css','text/css'),('.svg','image/svg+xml'),('.webp','image/webp')]:mimetypes.add_type(mime,ext)
 ROOT=Path(__file__).resolve().parents[1]
 with sync_playwright() as pw:
- browser=pw.chromium.launch(); outputs=[]
+ browser=pw.chromium.launch(**({'channel':os.environ['TEST_BROWSER_CHANNEL']} if os.environ.get('TEST_BROWSER_CHANNEL') else {})); outputs=[]
  for old in [True,False]:
   page=browser.new_page()
   page.add_init_script("""window.Studio={state:()=>'{"device":{},"history":[]}',landscape:()=>false};

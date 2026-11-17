@@ -9,7 +9,7 @@ window.PhotoStrips=(()=>{
   return Array.from({length:count},(_,index)=>({index,x:left+Math.floor(index/rows)*(sw+space)+rim,y:top+(index%rows)*(ph+space)+rim,w:pw,h:ph}));
  }
  function paint(ctx,w,h,photos){
-  for(const frame of layout(w,h,photos.length,state.stripBorder??photos[0]?.border??state.border,state.gap,state.media===5014))drawPhoto(ctx,photos[frame.index],frame.x,frame.y,frame.w,frame.h);
+  for(const frame of layout(w,h,photos.length||3,state.stripBorder??photos[0]?.border??state.border,state.gap,state.media===5014))drawPhoto(ctx,photos[frame.index],frame.x,frame.y,frame.w,frame.h);
  }
  return {layout,paint};
 })();

@@ -6,7 +6,7 @@ window.PhotoCapture=(()=>{
  try{pending=JSON.parse(localStorage.getItem(key())||'null');}catch{}
  function clear(){pending=null;try{localStorage.removeItem(key());}catch{}}
  async function start(){
-  if(busy||state.photos.length>=6)return;
+  if(busy||state.photos.length>=photoBatchLimit())return;
   if(pending){if(typeof Studio.captureReady!=='function')return;if(!window.BrowserTransport){Studio.captureReady();return;}if(await Studio.captureReady())return;clear();}
   try{if(typeof Studio.capture!=='function')throw Error('请更新 App 后再拍摄');const result=JSON.parse(Studio.capture(1)||'{}');if(!result.ok)throw Error(result.error||'无法打开相机');pending={id:result.id,mode:'add',before:signature()};busy=true;try{localStorage.setItem(key(),JSON.stringify(pending));}catch{}}
   catch(e){busy=false;toast(e.message);}
@@ -17,7 +17,7 @@ window.PhotoCapture=(()=>{
    const task=(async()=>{const before=signature(),eligible=pending?.before===before;
    try{for(const p of e.value)await loadPhoto(p);}catch{toast('拍摄照片未能载入，可稍后恢复');return;}
    const unchanged=before===signature(),fresh=e.value.filter(p=>!state.photos.some(old=>old.src===p.src));
-   if(fresh.length>6-state.photos.length){toast('照片已满，请移除一张后恢复上次拍摄');return;}
+   if(fresh.length>photoBatchLimit()-state.photos.length){toast('照片已满，请移除一张后恢复上次拍摄');return;}
    await previous({...e,value:fresh});
    if(!e.value.every(p=>state.photos.some(old=>old.src===p.src))){toast('拍摄照片未能载入，可稍后恢复');return;}
    if(pending?.id===id&&eligible&&unchanged){

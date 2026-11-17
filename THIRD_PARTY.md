@@ -8,7 +8,7 @@
 | 表情，未修改上游 SVG | [Twemoji 14.0.2](https://github.com/twitter/twemoji/tree/v14.0.2/assets/svg)，Twitter, Inc. and other contributors | `licenses/Twemoji-CC-BY-4.0.txt` |
 | 二维码编码 | [Nayuki QR Code generator v1.8.0](https://github.com/nayuki/QR-Code-generator/releases/tag/v1.8.0)，官方 ES6 附件 | `licenses/QR-Code-MIT.txt` |
 | 字体 | ZCOOL KuaiLe、Ma Shan Zheng | `assets/fonts/*-OFL.txt` |
-| 日历数据 | lunar_python 1.4.8、chinesecalendar 1.11.0；休息日截至2026年 | `licenses/Calendar-*.txt` |
+| 日历数据 | lunar_python 1.4.8、chinesecalendar 1.11.0；农历与节气至2035年，2027年调休依据国办发明电〔2026〕10号 | `licenses/Calendar-*.txt` |
 | 抠图模型与转换参考 | U2NetP（Apache-2.0）、rembg（MIT） | `assets/models/` |
 | 人脸检测 | OpenCV Zoo YuNet 2023mar（MIT） | `assets/models/YuNet-MIT.txt` |
 | Android推理运行时 | ONNX Runtime 1.23.2（MIT及捆绑组件许可） | `assets/models/ONNXRuntime-LICENSE.txt`、`ONNXRuntime-ThirdPartyNotices.txt` |

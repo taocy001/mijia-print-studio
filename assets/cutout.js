@@ -28,6 +28,6 @@ window.CutoutEditor=(()=>{
   }
   schedule();update();
  };
- const previousPrepare=preparePrintPages;preparePrintPages=async function(){await ready;if(state.mode==='id'&&state.photos.some(p=>pending.has(p)))throw Error('抠图尚未完成，请稍候再预览打印');return previousPrepare();};
+ const previousPrepare=preparePrintPages;preparePrintPages=async function(...args){await ready;if(state.mode==='id'&&state.photos.some(p=>pending.has(p)))throw Error('抠图尚未完成，请稍候再预览打印');return previousPrepare(...args);};
  return{ready,source};
 })();

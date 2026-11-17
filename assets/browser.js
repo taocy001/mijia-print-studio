@@ -13,7 +13,7 @@
  async function captureReady(){const result=captureResult;if(!result)return capturePicking;try{if(result.photos.length)await emit('photos',result.photos);}finally{await emit('captureFinished',result.finished);}return true;}
  function captureAck(id){if(captureResult?.finished.id!==id)return JSON.stringify({ok:true});try{localStorage.removeItem(captureKey());}catch{return JSON.stringify({error:'拍摄记录确认失败，可稍后恢复'});}captureResult=null;return JSON.stringify({ok:true});}
  function capture(limit){
-  if(limit<1)return JSON.stringify({error:'最多保留 6 张照片'});
+  if(limit<1)return JSON.stringify({error:'最多保留 12 张照片'});
   if(capturePicking||captureResult)return JSON.stringify({error:'请先完成或恢复上次拍摄'});
   const id=randomId(),input=document.createElement('input');input.type='file';input.accept='image/*';input.setAttribute('capture','environment');let finished=false;capturePicking=true;
   const finish=async(value,photos=[])=>{if(finished)return;finished=true;capturePicking=false;captureResult={photos,finished:{id,...value}};try{localStorage.setItem(captureKey(),JSON.stringify(captureResult));}catch{}await captureReady();};
