@@ -94,7 +94,7 @@ class PrintService:
             if not self.released and not self.io_lock.locked():
                 try:await self.status();failures=0
                 except Exception:failures=min(failures+1,4)
-            await asyncio.sleep(min(120,15*2**(failures-1)) if failures else 60)
+            await asyncio.sleep(min(120,15*2**(failures-1)) if failures else 15 if any(j['phase']=='uncertain' for j in self.jobs) else 60)
     async def stop(self,app):
         if getattr(self,'monitor',None):
             self.monitor.cancel()
@@ -193,7 +193,14 @@ class PrintService:
         if self.io_lock.locked():return
         async with self.io_lock:
             def read():
-                try:value=self._read_device(self.connection(True))
+                try:
+                    printer=self.connection(True);value=self._read_device(printer)
+                    own=next((j for j in self.jobs if j['phase']=='uncertain'),None)
+                    if own is not None:
+                        try:self._reconcile_on(printer,own,automatic=True)
+                        except Exception as error:
+                            # Keep the original failure and unknown outcome; never infer success from idle.
+                            _log.info('Automatic job reconciliation deferred (%s)',type(error).__name__)
                 finally:closed=self.disconnect()
                 if not closed:raise OSError('Bluetooth channel did not close cleanly')
                 return value
@@ -216,7 +223,7 @@ class PrintService:
         return result
     async def submit(self,session,body,*,prepared_files=None):
         key=body['requestId'];pages=body['pages']
-        if not isinstance(key,str) or not re.fullmatch('[A-Za-z0-9-]{16,80}',key) or not isinstance(pages,list) or not 1<=len(pages)<=6:raise UserError('打印参数无效')
+        if not isinstance(key,str) or not re.fullmatch('[A-Za-z0-9-]{16,80}',key) or not isinstance(pages,list) or not 1<=len(pages)<=12:raise UserError('打印参数无效')
         digest=hashlib.sha256(json.dumps(pages,sort_keys=True).encode()).hexdigest()
         async with self.lock:
             if self.released:raise UserError('蓝牙已释放，请先连接此设备')
@@ -304,6 +311,22 @@ class PrintService:
         job['message']=('原任务仍未结束，请检查打印机' if phase=='uncertain' else
             f"已确认完成 {job.get('completedPages',0)}/{len(pages)} 页；其余未发送，不会自动续打" if pages and phase=='cancelled' else job.get('terminalMessage','已确认原任务结束'))
         self.paused=any(j['phase']=='uncertain' for j in self.jobs);self.save()
+    def _reconcile_on(self,printer,own,automatic=False):
+        record=json.loads(printer.intent.read_text()) if printer.intent.exists() else {}
+        identifier=own.get('jobId') or record.get('job')
+        if record.get('job') and own.get('jobId') and record['job']!=own['jobId']:raise UserError('待确认记录不匹配，请现场核对')
+        if type(identifier)!=int or identifier<=0:raise UserError('未取得任务编号，请在服务端核对，不能自动重印')
+        records=printer.client.rpc('get-job-info',{'job-id':identifier})
+        if isinstance(records,dict) and records.get('error-code'):raise UserError(describe_errors(records['error-code']))
+        found=[v for v in records if v.get('job-id')==identifier]
+        if len(found)!=1:raise UserError('打印机已找不到原任务；请核对出纸后，在本机打印队列中结束记录，不会自动重印')
+        phase={9:'done',8:'cancelled',7:'aborted'}.get(found[0].get('job-state'),'uncertain')
+        if automatic and phase=='uncertain':return
+        from .bluetooth_printer import terminal_info,terminal_message
+        own['terminalInfo']=terminal_info(found[0]);own['terminalMessage']=terminal_message(own['terminalInfo'])
+        own['jobId']=identifier;self.save()
+        if phase!='uncertain':printer.intent.unlink(missing_ok=True)
+        self._finish_page(own,phase,identifier)
     async def reconcile(self,session,token=None,admin=False):
         if self.simulate:return {'ok':True}
         own=self._target(session,token,admin)
@@ -311,20 +334,7 @@ class PrintService:
         def reconcile():
             try:
                 printer=self.connection(True)
-                record=json.loads(printer.intent.read_text()) if printer.intent.exists() else {}
-                identifier=own.get('jobId') or record.get('job')
-                if record.get('job') and own.get('jobId') and record['job']!=own['jobId']:raise UserError('待确认记录不匹配，请现场核对')
-                if type(identifier)!=int or identifier<=0:raise UserError('未取得任务编号，请在服务端核对，不能自动重印')
-                records=printer.client.rpc('get-job-info',{'job-id':identifier})
-                if isinstance(records,dict) and records.get('error-code'):raise UserError(describe_errors(records['error-code']))
-                found=[v for v in records if v.get('job-id')==identifier]
-                if len(found)!=1:raise UserError('打印机已找不到原任务；请核对出纸后，在本机打印队列中结束记录，不会自动重印')
-                phase={9:'done',8:'cancelled',7:'aborted'}.get(found[0].get('job-state'),'uncertain')
-                from .bluetooth_printer import terminal_info,terminal_message
-                own['terminalInfo']=terminal_info(found[0]);own['terminalMessage']=terminal_message(own['terminalInfo'])
-                own['jobId']=identifier;self.save()
-                if phase!='uncertain':printer.intent.unlink(missing_ok=True)
-                self._finish_page(own,phase,identifier)
+                self._reconcile_on(printer,own)
                 try:self.device=self._read_device(printer)
                 except Exception:self._unavailable()
             except Exception:

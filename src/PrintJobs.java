@@ -32,7 +32,7 @@ final class PrintJobs {
  static JSONObject prepare(Context context,String owner,String requestId,String payload)throws Exception{
   List<File> created=new ArrayList<>();try{
                     JSONArray pages=new JSONArray(payload),jobs=new JSONArray();
-                    if(pages.length()<1||pages.length()>6)throw new IOException("每次最多打印 6 张相纸");
+                    if(pages.length()<1||pages.length()>12)throw new IOException("每次最多打印 12 张相纸");
                     String batch=UUID.randomUUID().toString();new File(context.getFilesDir(),"prints").mkdirs();
                     for(int i=0;i<pages.length();i++){
                         JSONObject options=pages.getJSONObject(i);int media=options.getInt("media");
