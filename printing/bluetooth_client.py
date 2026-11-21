@@ -31,6 +31,7 @@ class BluetoothClient:
         self.transport_info = ''
 
     def open(self, *, lock_timeout=0, attempts=2):
+        self.phase = 'device lock'
         try:
             digest = hashlib.sha256(self.address.encode()).hexdigest()[:24]
             path = Path(tempfile.gettempdir()) / f"mijia-bt-{user_id()}-{digest}.lock"
@@ -54,7 +55,8 @@ class BluetoothClient:
                         raise
                     logging.getLogger(__name__).warning('Bluetooth reconnect before job creation: phase=%s channel=%s', self.phase, self.channel)
                     time.sleep(.3)
-        except Exception:
+        except Exception as error:
+            error.bluetooth_phase = self.phase
             try:self.close()
             except Exception:logging.getLogger(__name__).warning('Bluetooth setup cleanup failed')
             raise

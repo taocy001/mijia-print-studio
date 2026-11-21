@@ -20,6 +20,7 @@ class PrintService:
     def __init__(self,data,simulate=False,address=None):
         self.data=Path(data);self.data.mkdir(parents=True,exist_ok=True,mode=0o700);self.simulate=simulate;self.address=address
         self.released=False;self.airprint_splice=False;self.device={};self.queue=asyncio.Queue();self.io_lock=asyncio.Lock();self.lock=asyncio.Lock();self.history_lock=asyncio.Lock();self.paused=False;self.cancel_flags={};self.device_printer=None;self._active_job=None;self._batch_verified=False
+        self._status_result = None
         self._locks=[];self._save_lock=threading.RLock()
         self._acquire(self.data/'service.lock')
         if not simulate:
@@ -184,6 +185,13 @@ class PrintService:
             async with self.io_lock:await asyncio.to_thread(self.disconnect)
             self.device={**self.device,'connected':False,'released':True,'checkedAt':int(time.time()*1000)}
     async def connect(self):
+        if self._status_result is not None:
+            error = await asyncio.shield(self._status_result)
+            if error is not None:
+                raise UserError(error)
+            return
+        if self.io_lock.locked():
+            raise UserError('打印机正在执行其他操作，请稍后再检测')
         self.released=False
         self.device={**self.device,'released':False}
         await self.status()
@@ -192,9 +200,15 @@ class PrintService:
         if self.simulate:self.device={'connected':True,'state':'30','alert':'::0','ribbon':-1,'media':5012,'checkedAt':int(time.time()*1000)};return
         if self.io_lock.locked():return
         async with self.io_lock:
+            self._status_result = asyncio.get_running_loop().create_future()
+            outcome = '打印机检测已中断，请重新检测'
+            phase = 'connection'
             def read():
+                nonlocal phase
                 try:
-                    printer=self.connection(True);value=self._read_device(printer)
+                    printer = self.connection(True)
+                    phase = 'read status'
+                    value = self._read_device(printer)
                     own=next((j for j in self.jobs if j['phase']=='uncertain'),None)
                     if own is not None:
                         try:self._reconcile_on(printer,own,automatic=True)
@@ -202,13 +216,24 @@ class PrintService:
                             # Keep the original failure and unknown outcome; never infer success from idle.
                             _log.info('Automatic job reconciliation deferred (%s)',type(error).__name__)
                 finally:closed=self.disconnect()
-                if not closed:raise OSError('Bluetooth channel did not close cleanly')
+                if not closed:
+                    phase = 'close'
+                    raise OSError('Bluetooth channel did not close cleanly')
                 return value
-            try:self.device=await self._device_call(read)
+            try:
+                self.device=await self._device_call(read)
+                outcome = None
             except Exception as error:
                 self._unavailable()
                 if isinstance(error,PrinterResponseError):self.device['error']=str(error)
-                raise UserError(self.device['error']) from error
+                outcome = self.device['error']
+                phase = getattr(error, 'bluetooth_phase', phase)
+                _log.warning('Printer status failed: at_ms=%d phase=%s error=%s',
+                             self.device['checkedAt'], phase, type(error).__name__)
+                raise UserError(outcome) from error
+            finally:
+                self._status_result.set_result(outcome)
+                self._status_result = None
     def public(self,job):
         result={k:v for k,v in job.items() if k in ('token','phase','message','progress','file','media','copies','title','orientation','createdAt','batchCount','batchIndex','jobId','completedPages','terminalInfo','telemetry')}
         if 'message' in result:result['message']=rewrite_error(result['message'])
